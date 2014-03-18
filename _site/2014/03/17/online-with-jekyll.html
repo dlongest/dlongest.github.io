@@ -1,0 +1,35 @@
+<h2>Online With Jekyll</h2>
+
+<p><em>17 March 2014</em></p>
+
+<p>This is the inaugural entry in my blog covering various software development topics, especially related to code design and dev practices.  To kick this off, I&#39;m going to briefly describe the steps I had to follow to get Jekyll Bootstrap online on Windows 7 as I had a bit of trouble that some of the excellent tutorials didn&#39;t quite cover.</p>
+
+<p>I had planned to just use Wordpress and purchase some domain hosting through someone like Bluehost as that seemed like a relatively well traveled path to get going.  But for some reason, I seemed to have some block at getting things set up.  I read <a href="http://blog.ploeh.dk/">Mark Seemann&#39;s excellent blog</a> and he had a post about switching to Jekyll right at a year ago, but it didn&#39;t mean much to me as I wasn&#39;t familiar with Github, amongst other challenges.</p>
+
+<p>I crossed the &quot;lack of experience&quot; issue off the list a few months back as I contributed some small patches to AutoFixture through Github and found Github to be truly awesome compared to the monolith that is TFS I normally use.  The idea of Github Pages sounded great:  easy content creation, push to Github, free; what&#39;s the downside?  The only remaining one is I don&#39;t consider myself a front-end developer and investing a bunch of time to re-learn the intricacies of CSS was more than I wanted to take on.  Wordpress has hundreds or thousands of themes available, but that ecosystem doesn&#39;t exist for Jekyll yet (although there are some).  </p>
+
+<p>Ultimately though, a cool new colleague of mine broke the logjam and said she&#39;d help me make it look awesome so all that was left was for me to get it online.</p>
+
+<p>The only truly required piece is to create a Github repository in a very precise format.  The <a href="http://pages.github.com/">Github Pages tutorial</a> was more than sufficient to take care of that.  Follow those steps, create a basic &quot;index.html&quot; page (with normal HTML markup), push it to the repository, wait about 10 minutes, and voila.  If you&#39;re truly skilled with some of Markdown dialects or never care to preview anything before pushing it, you could basically stop here.  But like most folks, I want to be able to iterate on my content and look-and-feel locally before pushing some god-awful mess onto the web.  For that, I needed a local install of Jekyll and therein lies the challenge.  </p>
+
+<p>Jekyll is a Ruby gem and what very minimal experience I tried to obtain in Ruby a while back did not go well as I&#39;m predominately a Windows user.  I have a Linux machine, but I almost exclusively use Windows for .NET development so the thought of using a separate machine for blogging was not palatable.  I recalled trying to get Ruby set up was not the easiest thing in the world compared to the &quot;install and run&quot; Microsoft approach.  </p>
+
+<p>I followed <a href="http://www.madhur.co.in/blog/2011/09/01/runningjekyllwindows.html">Madhur&#39;s tutorial</a> from a few years back essentially to the letter.  I downloaded Ruby 1.9.3 and DevKit-tdm-32-4.5.2-20111229-1559-sfx.  All of that installed fine, ran <code>gem install jekyll</code> and it installed Jekyll 1.4.3.  I already had Python 2.7 installed, ran <code>easy_install Pygments</code> which installed version 1.6.0.  I ran <code>jekyll new myblog</code>, switched directory, and now for the moment of truth: <code>jekyll serve</code>.  But alas, errors!</p>
+
+<p>Unfortunately, Madhur&#39;s tutorial, while it listed some errors, didn&#39;t have one that covered what I was seeing:  posix-spawn-0.3.8 throwing an error because it couldn&#39;t locate the <code>which</code> command.  I Googled around, tried switching posix-spawn from 0.3.8 to 0.3.6, that didn&#39;t do any good.  I came across some Stack Overflow posts that Pygments 1.6 didn&#39;t play nicely on Windows so I removed it (by deleting some <code>pygmentize</code> files from the Python install&#39;s Scripts folder).  Then I ran <code>gem install pygments.rb --version &quot;=0.5.0&quot;</code> to get that specific version as a Ruby gem.  Jekyll still didn&#39;t work, but <code>gem list</code> revealed that I had both Pygments 0.5.0 and 0.5.4.  Running <code>gem uninstall pygments.rb --version &quot;=0.5.4&quot;</code> took care of that.  Yes you&#39;ll probably notice that I went from the Python Pygments to installing it as a Ruby gem.  </p>
+
+<p>At this point I was feeling good so tried <code>jekyll serve</code> again, but still failed.  But I had moved forward from posix-spawn errors to fileutils errors.  A bit more Stack Overflowing turned up that Jekyll 1.4.3 seems to have some bug related to fileutils on Windows.  Simple enough, <code>gem uninstall jekyll</code> to remove 1.4.3, then <code>gem install --version &quot;=1.4.2&quot;</code> to install 1.4.2.  Run <code>jekyll serve</code>, hold my breath and... <strong>Success!</strong></p>
+
+<h3>TL;DR - Make Jekyll Play Nice with Windows 7</h3>
+
+<p>To summarize the versions I had to use:</p>
+
+<ul>
+<li>Ruby 1.9.3</li>
+<li>Pygments 0.5.0</li>
+<li>Jekyll 1.4.2</li>
+</ul>
+
+<p>From there, I&#39;ve been using <a href="http://24ways.org/2013/get-started-with-github-pages/">Anna Debenham&#39;s guide</a> to some basic Jekyll configuration.  </p>
+
+<p>Hopefully if someone else is trying to get Jekyll going on Windows 7, this might save you some effort at least as of this writing.  </p>
