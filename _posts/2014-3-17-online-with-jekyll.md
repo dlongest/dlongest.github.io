@@ -21,14 +21,16 @@ I followed [Madhur's tutorial](http://www.madhur.co.in/blog/2011/09/01/runningje
 
 Unfortunately, Madhur's tutorial, while it listed some errors, didn't have one that covered what I was seeing:  posix-spawn-0.3.8 throwing an error because it couldn't locate the `which` command.  I Googled around, tried switching posix-spawn from 0.3.8 to 0.3.6, that didn't do any good.  I came across some Stack Overflow posts that Pygments 1.6 didn't play nicely on Windows so I removed it (by deleting some `pygmentize` files from the Python install's Scripts folder).  Then I ran `gem install pygments.rb --version "=0.5.0"` to get that specific version as a Ruby gem.  Jekyll still didn't work, but `gem list` revealed that I had both Pygments 0.5.0 and 0.5.4.  Running `gem uninstall pygments.rb --version "=0.5.4"` took care of that.  Yes you'll probably notice that I went from the Python Pygments to installing it as a Ruby gem.  
 
-At this point I was feeling good so tried `jekyll serve` again, but still failed.  But I had moved forward from posix-spawn errors to fileutils errors.  A bit more Stack Overflowing turned up that Jekyll 1.4.3 seems to have some bug related to fileutils on Windows.  Simple enough, `gem uninstall jekyll` to remove 1.4.3, then `gem install --version "=1.4.2"` to install 1.4.2.  Run `jekyll serve`, hold my breath and... **Success!**
+At this point I was feeling good so tried `jekyll serve` again, but still failed.  But I had moved forward from posix-spawn errors to fileutils errors.  A bit more Stack Overflowing turned up that Jekyll 1.4.3 seems to have some bug related to fileutils on Windows.  Simple enough, `gem uninstall jekyll` to remove 1.4.3, then `gem install --version "=1.4.2"` to install 1.4.2.    Run `jekyll serve`, hold my breath, and errors, this time due to needing wdm.  Quick `gem install wdm` installed 0.1.0.  Moment of truth., run `jekyll serve` and... **Success!**
 
 ### TL;DR - Make Jekyll Play Nice with Windows 7
 To summarize the versions I had to use:
 
 + Ruby 1.9.3
++ Python 2.7.6
 + Pygments 0.5.0
 + Jekyll 1.4.2
++ wdm 0.1.0
 
 From there, I've been using [Anna Debenham's guide](http://24ways.org/2013/get-started-with-github-pages/) to some basic Jekyll configuration.  
 
