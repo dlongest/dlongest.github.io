@@ -1,6 +1,6 @@
 ---
 layout: post
-title: TeamFin: Team Foundation Integration
+title: TeamFin - Team Foundation Integration
 ---
 ##{{ page.title }}
 _{{ page.date | date: "%-d %B %Y" }}_
