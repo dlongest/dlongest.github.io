@@ -11,7 +11,7 @@ I've named it TeamFin, short for Team Foundation Integration.  There are a few s
 
 At the time, I'd already been looking into some TFS integration because I was attempting to use the API as an easier way to modify our automated build definitions.  I'll save that for another time, but every 6-8 weeks (i.e. our release schedule), we flip our development environment so we typically update our service builds to the new environment.  I'd grown tired of doing it by hand so I was working on a small utility to do it for me.  
 
-I was somewhat impressed with how relatively painless the TFS API was around the builds, but I spoke to soon because after I volunteered to take on this TFS task, I immediately realize that querying work items from TFS was calling a method called Query() that took a single string argument, this very specific TFS schema query (a work item query).  
+I was somewhat impressed with how relatively painless the TFS API was around the builds, but I spoke too soon because after I volunteered to take on this TFS task, I immediately realize that querying work items from TFS was calling a method called Query that took a single string argument, this very specific TFS schema query (a work item query).  
 
 Since LINQ to SQL exists solely to handle this sort of case, it took no real thought to decide to implement basically LINQ to TFS.  I'd been curious about doing this anyway, but now was about as good a time as I'd ever have.  
 
