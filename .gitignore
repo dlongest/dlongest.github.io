@@ -1,0 +1,17 @@
+[Dd]ebug/
+[Rr]elease/
+build/
+[Bb]in/
+[Oo]bj/
+[Hh]elp/
+NuGetPackages/
+TestResults/
+Packages.dgml
+*.suo
+*.sln.cache
+*.user
+*.cache
+*.orig
+*.vsmdi
+*.testrunconfig
+
