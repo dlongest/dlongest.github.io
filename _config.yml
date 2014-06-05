@@ -1,3 +1,6 @@
 name: Longineering
 markdown: redcarpet
 pygments: true
+pages_list:
+	About: '/about'
+	Archive: '/archive'
