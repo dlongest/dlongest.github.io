@@ -1,4 +1,18 @@
-<h2>TeamFin - Team Foundation Integration</h2>
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>TeamFin - Team Foundation Integration</title>
+        <link rel="stylesheet" href="/css/main.css" >
+		<link rel="stylesheet" href="/css/normalize.min.css" >
+		<link href='http://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic,700italic' rel='stylesheet' type='text/css'>
+    </head>
+    <body>
+	<img src='/images/logo.png' />
+
+    <h1>TeamFin - Team Foundation Integration</h1>
+
+    <h2>TeamFin - Team Foundation Integration</h2>
 
 <p><em>20 March 2014</em></p>
 
@@ -17,3 +31,21 @@
 <p>Despite my boss&#39; instructions on what needed to be done (work item creation), I felt that a key feature was the ability to identify items that were missing specific child items (such as Epics that didn&#39;t have Architectural Review items attached) so I worked first on getting the querying features functional.  The most tedious part was figuring out the TFS schema as there isn&#39;t much documentation. Ultimately the easiest route was to just dump every field in the schema into text files (programmatically), then look through those to determine the underlying field names and allowed values.  Once that was done, it was simply a matter of crafting a Visitor to walk an expression against my custom TfsWorkItem (a wrapper around the native WorkItem) and generate the SQL.  </p>
 
 <p>There&#39;s plenty of features left to implement, but I look forward to adding to it over the next few months if only as an exercise for myself.  If others stumble across it and find any value in it, even as a reference, that would be great too.</p>
+
+	
+	<nav class="nav-primary" role="navigation" >
+    <ul>
+        
+        <li>
+        	<a  href="//archive.html">Archive</a>
+        </li>
+        
+        <li>
+        	<a  href="//index.html">Home</a>
+        </li>
+        
+    </ul>
+</nav>
+
+</body>
+</html>
