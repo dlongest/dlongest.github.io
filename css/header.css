@@ -23,3 +23,7 @@ color: #071E3E;
 ul a:hover {
 color: #57A645
 }
+
+#header {
+float: left
+}
