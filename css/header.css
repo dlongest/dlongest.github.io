@@ -19,3 +19,7 @@ font-family: 'Droid Serif', serif;
 font-size: 21px;
 color: #371C1C;
 }
+
+ul a:hover {
+color: #57A645
+}
