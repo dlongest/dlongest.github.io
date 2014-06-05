@@ -18,7 +18,7 @@
 
 <p>Unfortunately, Madhur&#39;s tutorial, while it listed some errors, didn&#39;t have one that covered what I was seeing:  posix-spawn-0.3.8 throwing an error because it couldn&#39;t locate the <code>which</code> command.  I Googled around, tried switching posix-spawn from 0.3.8 to 0.3.6, that didn&#39;t do any good.  I came across some Stack Overflow posts that Pygments 1.6 didn&#39;t play nicely on Windows so I removed it (by deleting some <code>pygmentize</code> files from the Python install&#39;s Scripts folder).  Then I ran <code>gem install pygments.rb --version &quot;=0.5.0&quot;</code> to get that specific version as a Ruby gem.  Jekyll still didn&#39;t work, but <code>gem list</code> revealed that I had both Pygments 0.5.0 and 0.5.4.  Running <code>gem uninstall pygments.rb --version &quot;=0.5.4&quot;</code> took care of that.  Yes you&#39;ll probably notice that I went from the Python Pygments to installing it as a Ruby gem.  </p>
 
-<p>At this point I was feeling good so tried <code>jekyll serve</code> again, but still failed.  But I had moved forward from posix-spawn errors to fileutils errors.  A bit more Stack Overflowing turned up that Jekyll 1.4.3 seems to have some bug related to fileutils on Windows.  Simple enough, <code>gem uninstall jekyll</code> to remove 1.4.3, then <code>gem install --version &quot;=1.4.2&quot;</code> to install 1.4.2.  Run <code>jekyll serve</code>, hold my breath and... <strong>Success!</strong></p>
+<p>At this point I was feeling good so tried <code>jekyll serve</code> again, but still failed.  But I had moved forward from posix-spawn errors to fileutils errors.  A bit more Stack Overflowing turned up that Jekyll 1.4.3 seems to have some bug related to fileutils on Windows.  Simple enough, <code>gem uninstall jekyll</code> to remove 1.4.3, then <code>gem install --version &quot;=1.4.2&quot;</code> to install 1.4.2.    Run <code>jekyll serve</code>, hold my breath, and errors, this time due to needing wdm.  Quick <code>gem install wdm</code> installed 0.1.0.  Moment of truth., run <code>jekyll serve</code> and... <strong>Success!</strong></p>
 
 <h3>TL;DR - Make Jekyll Play Nice with Windows 7</h3>
 
@@ -26,8 +26,10 @@
 
 <ul>
 <li>Ruby 1.9.3</li>
+<li>Python 2.7.6</li>
 <li>Pygments 0.5.0</li>
 <li>Jekyll 1.4.2</li>
+<li>wdm 0.1.0</li>
 </ul>
 
 <p>From there, I&#39;ve been using <a href="http://24ways.org/2013/get-started-with-github-pages/">Anna Debenham&#39;s guide</a> to some basic Jekyll configuration.  </p>
