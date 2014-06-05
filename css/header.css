@@ -28,3 +28,7 @@ color: #57A645
 display: block;
 float: left
 }
+
+#postcontent {
+clear: both;
+}
