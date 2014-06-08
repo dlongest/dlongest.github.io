@@ -115,12 +115,12 @@ nav a {
     text-decoration: none;
     font-weight: bold;
 
-    color: white;
+    color: #444444;;
 }
 
 nav a:hover,
 nav a:visited {
-    color: white;
+    color: #58A621;
 }
 
 nav a:hover {
