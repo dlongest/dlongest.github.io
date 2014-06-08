@@ -10,10 +10,9 @@ float: left;
 }
 
 ul a {
-padding-right: 32px;
-padding-left: 32px;
+padding-right: 2em;
+padding-left: 2em;
 display: block;
-line-height: 80px;
 text-decoration: none;
 font-family: 'Droid Serif', serif;
 font-size: 21px;
