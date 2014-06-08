@@ -116,7 +116,6 @@ nav a {
     font-weight: bold;
 
     color: white;
-    background: #e44d26;
 }
 
 nav a:hover,
@@ -186,6 +185,7 @@ img {
 }
 
 #logo {   /* 6/7/14 */
+    float: left;
     width: 150px;
     height: 150px;  
 }
@@ -277,7 +277,7 @@ a h1:hover {
     }
 
     nav {
-        float: right;
+        float: left;
         width: 38%;
     }
 
