@@ -27,10 +27,10 @@ At this point I was feeling good so tried `jekyll serve` again, but still failed
 To summarize the versions I had to use:
 
 1. Ruby 1.9.3
-+ Python 2.7.6
-* Pygments 0.5.0
-+ Jekyll 1.4.2
-+ wdm 0.1.0
+2. Python 2.7.6
+3. Pygments 0.5.0
+4. Jekyll 1.4.2
+5. wdm 0.1.0
 
 From there, I've been using [Anna Debenham's guide](http://24ways.org/2013/get-started-with-github-pages/) to some basic Jekyll configuration.  
 
