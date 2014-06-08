@@ -26,9 +26,9 @@ At this point I was feeling good so tried `jekyll serve` again, but still failed
 ### TL;DR - Make Jekyll Play Nice with Windows 7
 To summarize the versions I had to use:
 
-+ Ruby 1.9.3
+1. Ruby 1.9.3
 + Python 2.7.6
-+ Pygments 0.5.0
+* Pygments 0.5.0
 + Jekyll 1.4.2
 + wdm 0.1.0
 
