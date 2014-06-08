@@ -64,6 +64,8 @@ textarea {
 body {
     font: 16px/26px 'Droid Serif', serif;
     color: #444444;
+    width: 55%;
+    margin: 0 auto; /* 6/7/14 */
 }
 
 .wrapper {
@@ -181,6 +183,11 @@ a:hover, a:focus {
 img {
     width: 100%;
     height: auto;
+}
+
+#logo {   /* 6/7/14 */
+    width: 150px;
+    height: 150px;  
 }
 
 .lt-gray-bg {
