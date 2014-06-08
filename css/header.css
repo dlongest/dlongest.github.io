@@ -26,7 +26,8 @@ color: #57A645
 
 #header {
 display: block;
-float: left
+float: left;
+margin: 2em 0 2em 0;
 }
 
 #postcontent {
