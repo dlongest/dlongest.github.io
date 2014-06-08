@@ -106,6 +106,10 @@ nav ul {
     padding: 0;
 }
 
+nav ul li {
+    float: left;
+}
+
 nav a {
     display: block;
     margin-bottom: 10px;
