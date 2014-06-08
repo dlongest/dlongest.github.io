@@ -313,6 +313,7 @@ a h1:hover {
     
     nav {
         clear: none;
+        margin-top: 2em;
     }
 }
 
