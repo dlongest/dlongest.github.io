@@ -1,7 +1,6 @@
 ul {
 list-style-type: none;
 height: 80px;
-width: 663px;
 margin: auto;
 }
 
@@ -10,8 +9,8 @@ float: left;
 }
 
 ul a {
-padding-right: 2em;
-padding-left: 2em;
+padding-right: 1em;
+padding-left: 1.3em;
 display: block;
 text-decoration: none;
 font-family: 'Droid Serif', serif;
@@ -26,6 +25,7 @@ color: #57A645
 #header {
 display: block;
 float: left;
+width: 100%;
 margin: 2em 0 2em 0;
 }
 
