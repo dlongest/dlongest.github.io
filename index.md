@@ -2,7 +2,6 @@
 layout: default
 title: Home
 ---
-<div class="main-content">
 <ul class="home-list">
   {% for post in site.posts %}
     <li>
@@ -10,4 +9,5 @@ title: Home
     </li>
   {% endfor %}
 </ul>
-</div>
+
+{% include foot.html %}
