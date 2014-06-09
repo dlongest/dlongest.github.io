@@ -3,11 +3,11 @@ layout: default
 title: Home
 ---
 <div class="main-content">
-<ul class="home-list">
+<div class="home-posts">
   {% for post in site.posts %}
-    <li>
-      <a href="{{ post.url }}">{{ post.title }}</a> {{ post.date | date: "%-d %B %Y" }}
-    </li>
+    <p><a href="{{ post.url }}">{{ post.title }}</a> 
+    <br />
+    {{ post.date | date: "%-d %B %Y" }}</p>
   {% endfor %}
-</ul>
+</div>
 </div>

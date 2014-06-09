@@ -23,6 +23,8 @@ display: block;
 float: left;
 width: 100%;
 margin: 2em 0 2em 0;
+padding-bottom: 1em;
+border-bottom: .6em solid #031d40;
 }
 
 #postcontent {
