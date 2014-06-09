@@ -11,5 +11,3 @@ title: Home
   {% endfor %}
 </ul>
 </div>
-
-{% include foot.html %}

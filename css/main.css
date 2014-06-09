@@ -218,6 +218,10 @@ a h1:hover {
     border-bottom: 1px dashed #444444;
 }
 
+.main-content {
+    height: 13em;
+}
+
 ul.home-list li {
     padding: 1em 0;
 }
