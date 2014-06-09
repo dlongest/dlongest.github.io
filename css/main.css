@@ -218,10 +218,6 @@ a h1:hover {
     border-bottom: 1px dashed #444444;
 }
 
-.main-content {
-    height: 13em;
-}
-
 .home-posts p {
     padding: 1em 0;
 }
@@ -229,12 +225,8 @@ a h1:hover {
 #footer {
     clear: both;
     font-size: .65em;
+    margin-bottom: 2em;
 }
-
-
-
-
-
 
 
 /* ==========================================================================
@@ -266,6 +258,10 @@ a h1:hover {
     nav li:last-child a {
         margin-right: 0;
     }
+    
+    .main-content {
+    height: 32em;
+	}
 
 /* ========================
     INTERMEDIATE: IE Fixes
@@ -281,6 +277,10 @@ a h1:hover {
 }
 
 @media only screen and (min-width: 768px) {
+
+.main-content {
+    height: 30em;
+	}
 
 /* ====================
     WIDE: CSS3 Effects
@@ -322,6 +322,10 @@ a h1:hover {
 }
 
 @media only screen and (min-width: 1140px) {
+
+.main-content {
+    height: 36em;
+	}
 
 /* ===============
     Maximal Width
