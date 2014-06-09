@@ -2,16 +2,27 @@
 <html>
     <head>
         <meta charset="utf-8">
-        <title>Online With Jekyll</title>
-        <link rel="stylesheet" href="/css/main.css" >
-		<link rel="stylesheet" href="/css/normalize.min.css" >
-		<link href='http://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic,700italic' rel='stylesheet' type='text/css'>
+        <!--<title>Online With Jekyll</title>-->
+		<link rel="stylesheet" href="/css/normalize.min.css" type="text/css" />
+		<link rel="stylesheet" href="/css/main.css" type="text/css" />
+		<link rel="stylesheet" href="/css/header.css" type="text/css"/>
+		<link rel="stylesheet" href="/css/solarized.css" type="text/css"/>
+		<link href='http://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic,700italic' rel='stylesheet' type='text/css' />
     </head>
     <body>
-	<img src='/images/logo.png' />
-
-    <h1>Online With Jekyll</h1>
-
+	<div id="header">
+	<img id="logo" src='/images/logo.png' />
+	<nav>
+	  <ul>
+	    <li><a href="#">Posts</a></li>
+	    <li><a href="#">Projects</a></li>
+	    <li><a href="#">About</a></li>
+	    <li><a href="#">Contact</a></li>
+	  </ul>
+    </nav>
+	</div>
+<div id="postcontent">
+   
     <h2>Online With Jekyll</h2>
 
 <p><em>17 March 2014</em></p>
@@ -38,20 +49,20 @@
 
 <p>To summarize the versions I had to use:</p>
 
-<ul>
+<ol>
 <li>Ruby 1.9.3</li>
 <li>Python 2.7.6</li>
 <li>Pygments 0.5.0</li>
 <li>Jekyll 1.4.2</li>
 <li>wdm 0.1.0</li>
-</ul>
+</ol>
 
 <p>From there, I&#39;ve been using <a href="http://24ways.org/2013/get-started-with-github-pages/">Anna Debenham&#39;s guide</a> to some basic Jekyll configuration.  </p>
 
 <p>Hopefully if someone else is trying to get Jekyll going on Windows 7, this might save you some effort at least as of this writing.  </p>
 
-	
-	<nav class="nav-primary" role="navigation" >
+</div>
+	<!--<nav class="nav-primary" role="navigation" >
     <ul>
         
         <li>
@@ -63,7 +74,11 @@
         </li>
         
     </ul>
-</nav>
+</nav>-->
+
+<div id="footer">
+    Copyright 2014 | Daniel Longest
+</div>
 
 </body>
 </html>

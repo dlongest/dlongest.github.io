@@ -2,16 +2,27 @@
 <html>
     <head>
         <meta charset="utf-8">
-        <title>TeamFin - Team Foundation Integration</title>
-        <link rel="stylesheet" href="/css/main.css" >
-		<link rel="stylesheet" href="/css/normalize.min.css" >
-		<link href='http://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic,700italic' rel='stylesheet' type='text/css'>
+        <!--<title>TeamFin - Team Foundation Integration</title>-->
+		<link rel="stylesheet" href="/css/normalize.min.css" type="text/css" />
+		<link rel="stylesheet" href="/css/main.css" type="text/css" />
+		<link rel="stylesheet" href="/css/header.css" type="text/css"/>
+		<link rel="stylesheet" href="/css/solarized.css" type="text/css"/>
+		<link href='http://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic,700italic' rel='stylesheet' type='text/css' />
     </head>
     <body>
-	<img src='/images/logo.png' />
-
-    <h1>TeamFin - Team Foundation Integration</h1>
-
+	<div id="header">
+	<img id="logo" src='/images/logo.png' />
+	<nav>
+	  <ul>
+	    <li><a href="#">Posts</a></li>
+	    <li><a href="#">Projects</a></li>
+	    <li><a href="#">About</a></li>
+	    <li><a href="#">Contact</a></li>
+	  </ul>
+    </nav>
+	</div>
+<div id="postcontent">
+   
     <h2>TeamFin - Team Foundation Integration</h2>
 
 <p><em>20 March 2014</em></p>
@@ -32,8 +43,8 @@
 
 <p>There&#39;s plenty of features left to implement, but I look forward to adding to it over the next few months if only as an exercise for myself.  If others stumble across it and find any value in it, even as a reference, that would be great too.</p>
 
-	
-	<nav class="nav-primary" role="navigation" >
+</div>
+	<!--<nav class="nav-primary" role="navigation" >
     <ul>
         
         <li>
@@ -45,7 +56,11 @@
         </li>
         
     </ul>
-</nav>
+</nav>-->
+
+<div id="footer">
+    Copyright 2014 | Daniel Longest
+</div>
 
 </body>
 </html>
