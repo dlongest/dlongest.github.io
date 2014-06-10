@@ -228,6 +228,10 @@ a h1:hover {
     margin-bottom: 2em;
 }
 
+.highlight {
+    padding: .75em;
+}
+
 
 /* ==========================================================================
    Media Queries
