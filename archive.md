@@ -8,7 +8,7 @@ title: Archive
 <div class="main-content">
 <div class="posts-list">
 {% for post in site.posts %}
-  <p>* {{ post.date | date_to_string }} &raquo; [ {{ post.title }} ]({{ post.url }})</p>
+  <p>{{ post.date | date_to_string }} | {{ post.title }} ({{ post.url }})</p>
 {% endfor %}
 </div>
 </div>
