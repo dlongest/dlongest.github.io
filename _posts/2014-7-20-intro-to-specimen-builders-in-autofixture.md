@@ -16,6 +16,7 @@ When I explain AutoFixture to other developers, I start by emphasizing its most 
 And of course there are plenty more beyond that that do a variety of things.  Mark has an older but still valid post from 2010 on how to approach creating a custom specimen builder, but I think there's some nuances to it that aren't entirely clear to new users of AutoFixture.  I know when I introduced AutoFixture at work we used it in a sub-optimal manner because it wasn't always clear how to best customize it for certain situations and I want to save others some effort in the future since there isn't always time to dig into new libraries like one would hope.  This in no way takes away from how incredible AutoFixture is or how responsive Mark and others (Adam Chester and Nikos Baxevanis among them) are to questions about it on Stack Overflow or elsewhere, just my attempt to contribute some first-hand experience and perspective.
 
 The `ISpecimenBuilder` interface has the following signature (taken directly from the AutoFixture codebase):
+
 ```csharp
 	public interface ISpecimenBuilder
     {        
