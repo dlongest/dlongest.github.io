@@ -34,12 +34,14 @@ Request is ambiguously typed as `object` - what is it?  Typically, `request` is 
 And that brings us finally to the point of this post:  why on earth is that and what does it mean for us trying to create a custom specimen builder?
 
 We'll start with the most obvious, Type.  At the most basic level, use of AutoFixture generally looks like:
+
 ```csharp
 	var fixture = new Fixture();            
     var contact = fixture.Create<Contact>();
 ```
 
 We create a Fixture, then we ask it for the type `Contact`, which is defined as:
+
 ```csharp
 	 public class Contact
     {
@@ -91,6 +93,7 @@ So here, what is `request`?  Well remember, we're asking the Fixture to resolve 
 ```
 
 Now we're able to create a `Contact` with a properly numeric PersonId whose value is being provided by the fixture's normal integer rules.  The final step is to tell AutoFixture about the specimen builder:
+
 ```csharp
 	fixture.Customizations.Add(new ContactGenerator());
 ```
