@@ -2,4 +2,3 @@ name: Code Like A Champion
 markdown: redcarpet
 pygments: true
 paginate: 2
-paginate_path: "blog/posts/:num"
