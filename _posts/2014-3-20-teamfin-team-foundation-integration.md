@@ -1,10 +1,8 @@
 ---
 layout: post
 title: TeamFin - Team Foundation Integration
+tags: design
 ---
-##{{ page.title }}
-_{{ page.date | date: "%-d %B %Y" }}_
-
 Continuing my week of first (after my first blog post), I've uploaded my first repository into GitHub.  I've contributed some minimal items to some projects, but this is the first one under my own name, which is pretty exciting.  
 
 I've named it TeamFin, short for Team Foundation Integration.  There are a few similar packages I've seen out there, but none that seemed quite what I was after.  At work, my boss mentioned to me "It would be great if we could have something we could run after someone creates a new work item in TFS that automatically creates some other work items."  So the most common example is if we create an Epic, we will generally also create an Architectural Review item to it.  There are very few Epics that don't undergo such a review so the point was to save some time and ensure all items receive their child tasks consistently so I volunteered to take it on.

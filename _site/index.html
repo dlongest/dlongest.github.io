@@ -22,18 +22,11 @@
     </nav>
 	</div>
 
-    <h1>Home</h1>
-
-    <div class="posts-list">
-  
-    <p><a href="/2014/12/14/writing-a-custom-mvc-model-validator.html">Writing a Custom MVC Model Validator</a> 
-    <br />
-    14 December 2014<br />
+    <div class="maincontent">
+      
 	<h2>Writing a Custom MVC Model Validator</h2>
-
-<p><em>14 December 2014</em></p>
-
-<p>The power of ASP.NET MVC is how extensible the framework is, but with this comes a challenge:  in certain cases as a developer you know (or have a feeling) that there is an extension point, but how do you find and use the right one?  In a series of posts, I will explore the myriad extension points in MVC from the perspective of a project I&#39;ve been working on for a few months.  Like most development, every situation has an almost limitless number of options for accomplishing it, but with regards to extending MVC in my experience there is often one &quot;best&quot; choice, the key is being aware of it.  </p>
+	<em>14 December 2014</em>
+	<p>The power of ASP.NET MVC is how extensible the framework is, but with this comes a challenge:  in certain cases as a developer you know (or have a feeling) that there is an extension point, but how do you find and use the right one?  In a series of posts, I will explore the myriad extension points in MVC from the perspective of a project I&#39;ve been working on for a few months.  Like most development, every situation has an almost limitless number of options for accomplishing it, but with regards to extending MVC in my experience there is often one &quot;best&quot; choice, the key is being aware of it.  </p>
 
 <p>To establish some context, here&#39;s the project: a login application.  There are thousands (or millions) of these available so why would we be writing our own?  I work for a not-for-profit company and we made the decision to license a popular identity access management (IAM) platform from a vendor and partner with a second company to implement and support it for us.  Initially, there had been no development work planned on our side at all: the implementer would take care of all of it with an out-of-the-box login application configured against various cloud services (provided by the solution vendor, but running in the implementer&#39;s cloud).  However, the OOTB application was not responsive, which was a big deal for us so the decision was made for us to write our own.  Conceptually, this seemed straightforward enough: the login application would (in theory) simply make calls to either a REST service (for logging in) or a SOAP service (for most other identity functions, password resets and the like).  However, over time our custom login application began to accrue more and more functionality as the implementer struggled to support our requirements within the vendor solution.  It is this difficulty supporting some requirements that led us to extending the framework in various ways. </p>
 
@@ -279,15 +272,10 @@
 <p>This concludes how we used a custom model validator to ensure a password doesn&#39;t contain certain proscribed text.  In the next post, we will explore how we extending model binding to actually populate the necessary first and last name properties on the view models.</p>
  
 	</p>
-  
-    <p><a href="/2014/07/20/intro-to-specimen-builders-in-autofixture.html">Introduction to Custom Specimen Builders in AutoFixture</a> 
-    <br />
-    20 July 2014<br />
+      
 	<h2>Introduction to Custom Specimen Builders in AutoFixture</h2>
-
-<p><em>20 July 2014</em></p>
-
-<p>It is no secret at work that I greatly admire Mark Seemann.  Anyone that comes to me and asks about software design I steer them right to his book &quot;Dependency Injection in .NET&quot;.  In some respects, the title does it a bit of a disservice as at least half of it discusses some critical component design practices that apply regardless of whether one wants to use dependency injection.  Don&#39;t get me wrong, he covers dependency injection quite comprehensively, but there&#39;s a lot more to DI than just picking a container.  Beyond his book, Mark is an incredibly accessible guy in a couple respects.  One, he blogs pretty regularly and has a lot of incredible posts on design, I find myself going back to them again and again.  And two, he is the author of AutoFixture, which needs almost no introduction in the .NET world.  And it is this library that is the subject of this post. </p>
+	<em>20 July 2014</em>
+	<p>It is no secret at work that I greatly admire Mark Seemann.  Anyone that comes to me and asks about software design I steer them right to his book &quot;Dependency Injection in .NET&quot;.  In some respects, the title does it a bit of a disservice as at least half of it discusses some critical component design practices that apply regardless of whether one wants to use dependency injection.  Don&#39;t get me wrong, he covers dependency injection quite comprehensively, but there&#39;s a lot more to DI than just picking a container.  Beyond his book, Mark is an incredibly accessible guy in a couple respects.  One, he blogs pretty regularly and has a lot of incredible posts on design, I find myself going back to them again and again.  And two, he is the author of AutoFixture, which needs almost no introduction in the .NET world.  And it is this library that is the subject of this post. </p>
 
 <p>When I explain AutoFixture to other developers, I start by emphasizing its most straightforward use: when writing unit tests, it will provide you with test data with almost no setup, as if by magic.  Whether you needs integers or strings or collections or even complex objects, AutoFixture will provide them to you in a semi-random fashion.  Within the AutoFixture codebase, the components that handle creation of some value are termed specimen builders and they inherit <code>ISpecimenBuilder</code>.  A few common examples:  </p>
 

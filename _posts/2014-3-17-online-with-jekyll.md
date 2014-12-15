@@ -1,10 +1,8 @@
 ---
 layout: post
 title: Online With Jekyll
+tags: general
 ---
-##{{ page.title }}
-_{{ page.date | date: "%-d %B %Y" }}_
-
 This is the inaugural entry in my blog covering various software development topics, especially related to code design and dev practices.  To kick this off, I'm going to briefly describe the steps I had to follow to get Jekyll Bootstrap online on Windows 7 as I had a bit of trouble that some of the excellent tutorials didn't quite cover.
 
 I had planned to just use Wordpress and purchase some domain hosting through someone like Bluehost as that seemed like a relatively well traveled path to get going.  But for some reason, I seemed to have some block at getting things set up.  I read [Mark Seemann's excellent blog](http://blog.ploeh.dk/) and he had a post about switching to Jekyll right at a year ago, but it didn't mean much to me as I wasn't familiar with Github, amongst other challenges.

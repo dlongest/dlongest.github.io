@@ -1,10 +1,8 @@
 ---
 layout: post
 title: Controlling collection name deserialization in .NET
+tags: general
 ---
-##{{ page.title }}
-_{{ page.date | date: "%-d %B %Y" }}_
-
 It's not a thing I do often, but I found myself the other day needing to control XML serialization and deserialization.  Most of the time we just generate things like service proxies and don't alter the XML after that.  This case was a bit different as we have a vendor that is supplying us with an SAAS implementation for IAM and I'm managing the implementation on our side of an MVC application to handle login and some related identity services. 
 
 After a few starts and stops on the vendor's part, we've finally figured out we're going to cause a "REST" service they'll expose to us.  I'm quoting "REST" because most of the time it seems like when people use that term, they mean transmitting data over HTTP, but are seldom (or never) even trying to address most parts of the REST pattern (such as hypermedia, resource design, etc).  Or basically, they're at Level 0 in the [Richardson Maturity Model]{http://martinfowler.com/articles/richardsonMaturityModel.html}. 

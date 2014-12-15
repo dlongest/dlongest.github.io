@@ -1,10 +1,8 @@
 ---
 layout: post
 title: HTML-Safe Validation Summary in MVC
+tags: MVC
 ---
-##{{ page.title }}
-_{{ page.date | date: "%-d %B %Y" }}_
-
 My team at work is writing an MVC application for customer login and various related self-service tasks.  This application replaces a legacy ASP.NET application that does a similar job, but we're switching vendors (so moving from an identity platform hosted on-premises to a different company's platform in the cloud).  I last used MVC about 2 years back and I've been impressed with the improvements in MVC 5 over MVC 3 from back then, so much of it seems to just work in a way that I wrestled with a lot back then.  Although it's certainly possible I've just come a long way in my understanding of the technology and it was never MVC's fault I used it wrong. 
 
 One thing that still seems a lot harder than it should be is validation and error messaging.  MVC has all the built-in jQuery validate and unobtrusive tools driven from the various .NET annotations and that generally works great.  But at least for us, the default annotation error messages are not sufficient.  Also, it would be better to put them all in one place for maintenance purposes (and ideally, have them externalized).  Also, we want the front-end and back-end to cause them to look the same in case users have Javascript disabled.  Now I should say that our enterprise site doesn't work for you if Javascript is off so I'm not exactly sure why we're pushing this part so hard as I'm also not aware of plans to make our site work without it.  But nonetheless, we march forward. 
