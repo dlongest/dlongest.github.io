@@ -1,11 +1,12 @@
 ---
 layout: post
-title: Hooking into ASP.NET MVC Model Binding
+title: Writing a Custom MVC Model Validator
+tags: MVC, design
 ---
 ##{{ page.title }}
 _{{ page.date | date: "%-d %B %Y" }}_
 
-The power of ASP.NET MVC is how extensible the framework is, but with this comes a challenge:  in certain cases as a developer you know (or have a feeling) that there is an extension point, but how do you find and use the right one?  This post will address one such extension point and then in a series of posts, I will explore a variety of ways we've extended MVC in a recent project.  
+The power of ASP.NET MVC is how extensible the framework is, but with this comes a challenge:  in certain cases as a developer you know (or have a feeling) that there is an extension point, but how do you find and use the right one?  In a series of posts, I will explore the myriad extension points in MVC from the perspective of a project I've been working on for a few months.  Like most development, every situation has an almost limitless number of options for accomplishing it, but with regards to extending MVC in my experience there is often one "best" choice, the key is being aware of it.  
 
 To establish some context, here's the project: a login application.  There are thousands (or millions) of these available so why would we be writing our own?  I work for a not-for-profit company and we made the decision to license a popular identity access management (IAM) platform from a vendor and partner with a second company to implement and support it for us.  Initially, there had been no development work planned on our side at all: the implementer would take care of all of it with an out-of-the-box login application configured against various cloud services (provided by the solution vendor, but running in the implementer's cloud).  However, the OOTB application was not responsive, which was a big deal for us so the decision was made for us to write our own.  Conceptually, this seemed straightforward enough: the login application would (in theory) simply make calls to either a REST service (for logging in) or a SOAP service (for most other identity functions, password resets and the like).  However, over time our custom login application began to accrue more and more functionality as the implementer struggled to support our requirements within the vendor solution.  It is this difficulty supporting some requirements that led us to extending the framework in various ways. 
 
