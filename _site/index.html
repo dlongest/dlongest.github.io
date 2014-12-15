@@ -14,7 +14,7 @@
 	<a href="http://dlongest.github.io/" title="Dan Longest's Blog Homepage"><img id="logo" src='/images/logo.png' /></a>
 	<nav>
 	  <ul>
-	    <li><a href="#">Posts</a></li>
+	    <li><a href="posts.html">Posts</a></li>
 	    <li><a href="#">Projects</a></li>
 	    <li><a href="#">About</a></li>
 	    <li><a href="#">Contact</a></li>
@@ -27,25 +27,259 @@
     <div class="main-content">
 <div class="posts-list">
   
-    <p><a href="/2014/07/20/intro-to-specimen-builders-in-autofixture.html">Introduction to Custom Specimen Builders in AutoFixture</a> 
+    <p><a href="/2014/12/14/writing-a-custom-mvc-model-validator.html">Writing a Custom MVC Model Validator</a> 
     <br />
-    20 July 2014</p>
-  
-    <p><a href="/2014/06/08/html-safe-validation-summary-in-mvc.html">HTML-Safe Validation Summary in MVC</a> 
-    <br />
-    8 June 2014</p>
-  
-    <p><a href="/2014/06/06/controlling-collection-name-deserialization-in-dotnet.html">Controlling collection name deserialization in .NET</a> 
-    <br />
-    6 June 2014</p>
-  
-    <p><a href="/2014/03/20/teamfin-team-foundation-integration.html">TeamFin - Team Foundation Integration</a> 
-    <br />
-    20 March 2014</p>
-  
-    <p><a href="/2014/03/17/online-with-jekyll.html">Online With Jekyll</a> 
-    <br />
-    17 March 2014</p>
+    14 December 2014<br />
+    <h2>Writing a Custom MVC Model Validator</h2>
+
+<p><em>14 December 2014</em></p>
+
+<p>The power of ASP.NET MVC is how extensible the framework is, but with this comes a challenge:  in certain cases as a developer you know (or have a feeling) that there is an extension point, but how do you find and use the right one?  In a series of posts, I will explore the myriad extension points in MVC from the perspective of a project I&#39;ve been working on for a few months.  Like most development, every situation has an almost limitless number of options for accomplishing it, but with regards to extending MVC in my experience there is often one &quot;best&quot; choice, the key is being aware of it.  </p>
+
+<p>To establish some context, here&#39;s the project: a login application.  There are thousands (or millions) of these available so why would we be writing our own?  I work for a not-for-profit company and we made the decision to license a popular identity access management (IAM) platform from a vendor and partner with a second company to implement and support it for us.  Initially, there had been no development work planned on our side at all: the implementer would take care of all of it with an out-of-the-box login application configured against various cloud services (provided by the solution vendor, but running in the implementer&#39;s cloud).  However, the OOTB application was not responsive, which was a big deal for us so the decision was made for us to write our own.  Conceptually, this seemed straightforward enough: the login application would (in theory) simply make calls to either a REST service (for logging in) or a SOAP service (for most other identity functions, password resets and the like).  However, over time our custom login application began to accrue more and more functionality as the implementer struggled to support our requirements within the vendor solution.  It is this difficulty supporting some requirements that led us to extending the framework in various ways. </p>
+
+<p>There are plenty of other posts and articles out on the web that describe the order of certain actions in the framework and I won&#39;t go into those in detail, but the key is this order:</p>
+
+<ul>
+<li>Model binding (which includes model validation)</li>
+<li>Filters (authorization, action, result)</li>
+</ul>
+
+<p>Model binding is the set of components that populate a model (which is often a view model, but can be any type which is the parameter for a controller action), using values pulled from the value provider.  A value provider is an abstraction over the HTTP request itself plus whatever custom value providers have been defined.  Under the hood there are several different default providers (one for querystring values, one for posted data, etc), but they are gathered together into a composite pattern (so if you look at the ControllerContext.Controller.ValueProvider, it is a single instance).  As the binding progresses, the model binder fetches model validators out of the framework&#39;s static <code>ModelValidatorProviders</code> collection and executes each validator.  An individual model validator looks at some part of the model that it cares about and generates a <code>ModelValidationResult</code> containing error text if the validation fails that the model binder then writes into the model state error. </p>
+
+<p>So here&#39;s the situation: like most enterprises, we have specific rules governing a user&#39;s password, but the vendor IAM platform simply could not be configured to support our custom rules in concert with disabling certain out of the box rules we didn&#39;t want to use (yes, very bizarre, I agree).  What are our custom rules? </p>
+
+<ul>
+<li>Can&#39;t use certain banned phrases in the password</li>
+<li>Can&#39;t use your first name or last name anywhere in the password</li>
+<li>Password must be between 8 and 30 characters long</li>
+<li>Password must have a lowercase character, an uppercase character, and a number</li>
+<li>Password cannot have certain special characters (or said another way, we only support a limited numuber of non-alphanumeric characters)</li>
+</ul>
+
+<p>A few of the rules are supported trivially with model annotations, such as the length (using <code>StringLength</code>) and acceptable alphanumeric characters (using custom RegEx attributes if nothing else).  However, the restrictions on first name and last name and banned phrases are much more difficult, especially: where do the first name and last name come from?  Where do the banned phrases come from?  An attribute could be written to do this, but it would almost definitely not be unit testable. </p>
+
+<p>It feels in this case like model validation is still the right mechanism to use: it&#39;s built into the framework and will run for us automatically so let&#39;s start by writing a model validator to validate the password.  </p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp"> <span class="k">public</span> <span class="k">class</span> <span class="nc">PasswordValidator</span> <span class="p">:</span> <span class="n">ModelValidator</span>
+    <span class="p">{</span>
+
+        <span class="k">public</span> <span class="nf">PasswordValidator</span><span class="p">(</span><span class="n">IAllowPassword</span> <span class="n">allowPassword</span><span class="p">,</span> <span class="n">ModelMetadata</span> <span class="n">metadata</span><span class="p">,</span>
+                                 <span class="n">ControllerContext</span> <span class="n">context</span><span class="p">)</span>
+            <span class="p">:</span> <span class="k">base</span><span class="p">(</span><span class="n">metadata</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">this</span><span class="p">.</span><span class="n">PasswordProperty</span> <span class="p">=</span> <span class="n">metadata</span><span class="p">.</span><span class="n">ModelType</span><span class="p">.</span><span class="n">GetProperties</span><span class="p">().</span><span class="n">First</span><span class="p">(</span><span class="n">a</span> <span class="p">=&gt;</span> <span class="n">Attribute</span><span class="p">.</span><span class="n">IsDefined</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="k">typeof</span><span class="p">(</span><span class="n">PasswordFormatAttribute</span><span class="p">)));</span>
+            <span class="k">this</span><span class="p">.</span><span class="n">Password</span> <span class="p">=</span> <span class="k">this</span><span class="p">.</span><span class="n">PasswordProperty</span><span class="p">.</span><span class="n">GetValue</span><span class="p">(</span><span class="n">metadata</span><span class="p">.</span><span class="n">Model</span><span class="p">,</span> <span class="k">null</span><span class="p">)</span> <span class="k">as</span> <span class="kt">string</span><span class="p">;</span>
+            <span class="k">this</span><span class="p">.</span><span class="n">AllowPasswordPolicy</span> <span class="p">=</span> <span class="n">allowPassword</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="n">PropertyInfo</span> <span class="n">PasswordProperty</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+
+        <span class="k">public</span> <span class="kt">string</span> <span class="n">Password</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+
+        <span class="k">public</span> <span class="n">IAllowPassword</span> <span class="n">AllowPasswordPolicy</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+
+
+        <span class="k">public</span> <span class="k">override</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">ModelValidationResult</span><span class="p">&gt;</span> <span class="n">Validate</span><span class="p">(</span><span class="kt">object</span> <span class="n">container</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">try</span>
+            <span class="p">{</span>
+                <span class="kt">var</span> <span class="n">notAllowedReasons</span> <span class="p">=</span> <span class="k">this</span><span class="p">.</span><span class="n">AllowPasswordPolicy</span><span class="p">.</span><span class="n">IsAllowed</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="n">Password</span><span class="p">);</span>
+
+                <span class="k">return</span> <span class="n">notAllowedReasons</span><span class="p">.</span><span class="n">Select</span><span class="p">(</span><span class="n">a</span> <span class="p">=&gt;</span> <span class="n">CreateResult</span><span class="p">(</span><span class="n">a</span><span class="p">));</span>
+
+            <span class="p">}</span>
+            <span class="k">catch</span> <span class="p">(</span><span class="n">Exception</span> <span class="n">ex</span><span class="p">)</span>
+            <span class="p">{</span>
+                <span class="k">return</span> <span class="n">Enumerable</span><span class="p">.</span><span class="n">Empty</span><span class="p">&lt;</span><span class="n">ModelValidationResult</span><span class="p">&gt;();</span>
+            <span class="p">}</span>
+        <span class="p">}</span>    
+
+
+        <span class="k">protected</span> <span class="n">ModelValidationResult</span> <span class="nf">CreateResult</span><span class="p">(</span><span class="kt">string</span> <span class="n">message</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">return</span> <span class="k">new</span> <span class="n">ModelValidationResult</span>
+            <span class="p">{</span>
+                <span class="n">MemberName</span> <span class="p">=</span> <span class="s">&quot;Password&quot;</span><span class="p">,</span>
+                <span class="n">Message</span> <span class="p">=</span> <span class="n">message</span>
+            <span class="p">};</span>
+        <span class="p">}</span>
+    <span class="p">}</span>   
+</code></pre></div>
+<p>The <code>PasswordValidator</code> relies on a collection of <code>IAllowPassword</code> rules to decide if a given password is acceptable or not.  The validator is created by a custom instance of <code>ModelValidatorProvider</code> which in this case looks up the banned phrsaes from the web.config and then instantiates the other IAllowPassword instances:</p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp"><span class="k">public</span> <span class="k">class</span> <span class="nc">WebConfigPasswordComplexityModelValidatorProvider</span> <span class="p">:</span> <span class="n">ModelValidatorProvider</span>
+    <span class="p">{</span>
+        <span class="k">private</span> <span class="k">readonly</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">&gt;</span> <span class="n">bannedPhrases</span><span class="p">;</span>        
+
+        <span class="k">public</span> <span class="nf">WebConfigPasswordComplexityModelValidatorProvider</span><span class="p">()</span>
+        <span class="p">{</span>
+            <span class="kt">var</span> <span class="n">config</span> <span class="p">=</span> <span class="n">ConfigurationManager</span><span class="p">.</span><span class="n">GetSection</span><span class="p">(</span><span class="s">&quot;passwordComplexityRules&quot;</span><span class="p">);</span>
+
+            <span class="k">if</span> <span class="p">(</span><span class="n">config</span><span class="p">==</span><span class="k">null</span><span class="p">)</span>
+            <span class="p">{</span>
+                <span class="k">this</span><span class="p">.</span><span class="n">bannedPhrases</span> <span class="p">=</span> <span class="k">new</span> <span class="n">List</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">&gt;();</span>
+            <span class="p">}</span>
+            <span class="k">else</span>
+            <span class="p">{</span>
+                <span class="kt">var</span> <span class="n">passwordConfig</span> <span class="p">=</span> <span class="p">(</span><span class="n">PasswordComplexityRulesConfigurationSection</span><span class="p">)</span><span class="n">config</span><span class="p">;</span>
+
+                <span class="k">this</span><span class="p">.</span><span class="n">bannedPhrases</span> <span class="p">=</span> <span class="n">passwordConfig</span><span class="p">.</span><span class="n">BannedPhrases</span>
+                                       <span class="p">.</span><span class="n">Cast</span><span class="p">&lt;</span><span class="n">PasswordComplexityBannedPhraseConfigurationElement</span><span class="p">&gt;()</span>
+                                       <span class="p">.</span><span class="n">Select</span><span class="p">(</span><span class="n">a</span> <span class="p">=&gt;</span> <span class="n">a</span><span class="p">.</span><span class="n">Phrase</span><span class="p">);</span>
+            <span class="p">}</span>           
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="k">override</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">ModelValidator</span><span class="p">&gt;</span> <span class="n">GetValidators</span><span class="p">(</span><span class="n">ModelMetadata</span> <span class="n">metadata</span><span class="p">,</span> <span class="n">ControllerContext</span> <span class="n">context</span><span class="p">)</span>
+        <span class="p">{</span>              
+            <span class="k">if</span> <span class="p">(!</span><span class="k">typeof</span><span class="p">(</span><span class="n">AutomaticReturnViewModel</span><span class="p">).</span><span class="n">IsAssignableFrom</span><span class="p">(</span><span class="n">metadata</span><span class="p">.</span><span class="n">ModelType</span><span class="p">))</span>
+                <span class="k">return</span> <span class="n">Enumerable</span><span class="p">.</span><span class="n">Empty</span><span class="p">&lt;</span><span class="n">ModelValidator</span><span class="p">&gt;();</span>
+
+            <span class="k">if</span> <span class="p">(!</span><span class="n">metadata</span><span class="p">.</span><span class="n">ModelType</span><span class="p">.</span><span class="n">GetProperties</span><span class="p">().</span><span class="n">Any</span><span class="p">(</span><span class="n">a</span> <span class="p">=&gt;</span> <span class="n">Attribute</span><span class="p">.</span><span class="n">IsDefined</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="k">typeof</span><span class="p">(</span><span class="n">PasswordFormatAttribute</span><span class="p">))))</span>
+                <span class="k">return</span> <span class="n">Enumerable</span><span class="p">.</span><span class="n">Empty</span><span class="p">&lt;</span><span class="n">ModelValidator</span><span class="p">&gt;();</span>
+
+            <span class="k">return</span> <span class="k">new</span> <span class="n">List</span><span class="p">&lt;</span><span class="n">ModelValidator</span><span class="p">&gt;</span>
+            <span class="p">{</span>
+                <span class="k">new</span> <span class="nf">PasswordValidator</span><span class="p">(</span><span class="k">new</span> <span class="n">CompositeAllowPassword</span><span class="p">(</span>
+                                        <span class="k">new</span> <span class="nf">CannotUseInPasswordAttributeValuesNotAllowed</span><span class="p">(</span><span class="n">metadata</span><span class="p">.</span><span class="n">Model</span><span class="p">),</span>
+                                        <span class="k">new</span> <span class="nf">PasswordWithBannedPhrasesNotAllowed</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="n">bannedPhrases</span><span class="p">)),</span> <span class="n">metadata</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
+            <span class="p">};</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+</code></pre></div>
+<p>Our custom ModelValidatorProvider is hooked into the framework in the Global.asax:</p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp"> <span class="n">ModelValidatorProviders</span><span class="p">.</span><span class="n">Providers</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="k">new</span> <span class="n">WebConfigPasswordComplexityModelValidatorProvider</span><span class="p">());</span>
+</code></pre></div>
+<p>Now for the actual <code>IAllowPassword</code> implementations.</p>
+
+<p>First, <code>PasswordWithBannedPhrasesNotAllowed</code> takes a collection of banned phrases (simple strings) and just verifies if the possiblePassword contains any of them.  </p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp"><span class="k">public</span> <span class="k">class</span> <span class="nc">PasswordWithBannedPhrasesNotAllowed</span> <span class="p">:</span> <span class="n">IAllowPassword</span>
+    <span class="p">{</span>
+        <span class="k">public</span> <span class="nf">PasswordWithBannedPhrasesNotAllowed</span><span class="p">(</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">&gt;</span> <span class="n">bannedPhrases</span><span class="p">)</span>
+            <span class="p">:</span> <span class="k">this</span><span class="p">(</span><span class="n">bannedPhrases</span><span class="p">,</span> <span class="n">ControllerResources</span><span class="p">.</span><span class="n">Password_Phrase_NotAllowed</span><span class="p">)</span>
+        <span class="p">{</span>
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="nf">PasswordWithBannedPhrasesNotAllowed</span><span class="p">(</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">&gt;</span> <span class="n">bannedPhrases</span><span class="p">,</span> <span class="kt">string</span> <span class="n">errorMessage</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">this</span><span class="p">.</span><span class="n">BannedPhrases</span> <span class="p">=</span> <span class="n">bannedPhrases</span> <span class="p">??</span> <span class="k">new</span> <span class="n">List</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">&gt;();</span>
+            <span class="k">this</span><span class="p">.</span><span class="n">ErrorMessage</span> <span class="p">=</span> <span class="n">errorMessage</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">&gt;</span> <span class="n">BannedPhrases</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+
+        <span class="k">public</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">&gt;</span> <span class="n">IsAllowed</span><span class="p">(</span><span class="kt">string</span> <span class="n">possiblePassword</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="n">BannedPhrases</span><span class="p">.</span><span class="n">Any</span><span class="p">(</span><span class="n">a</span> <span class="p">=&gt;</span> <span class="n">possiblePassword</span><span class="p">.</span><span class="n">ContainsIgnoreCase</span><span class="p">(</span><span class="n">a</span><span class="p">)))</span>
+                <span class="k">return</span> <span class="k">new</span> <span class="n">List</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">&gt;</span> <span class="p">{</span> <span class="k">this</span><span class="p">.</span><span class="n">ErrorMessage</span> <span class="p">};</span>
+
+            <span class="k">return</span> <span class="n">Enumerable</span><span class="p">.</span><span class="n">Empty</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">&gt;();</span>
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="kt">string</span> <span class="n">ErrorMessage</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+    <span class="p">}</span>
+</code></pre></div>
+<p>Next is the more interesting rule that a password cannot contain a first name or last name.  The challenging part of this instance is: how does it know where to find the first name and last name?  Does it have to look it up or is the field available to it somewhere (such as on the model)?  Can it work in a consistent way across any view model that has a password (which, for us, is ChangePasswordViewModel, ResetPasswordViewModel, and CreateAccountViewModel, as all of them allow a user to input a new password)?  </p>
+
+<p>Here&#39;s one approach.  First, let&#39;s say that the view model needs to have the first name and last name that should be used for validation.  In some cases, the user is entering the first name and last name when they enter a new password so it&#39;s a natural fit (e.g. creating an account).  In other cases, first name and last name aren&#39;t entered by the user so we must figure out some way to populate them.  That may seem like a hardship (and a later post will outline a way we did that), but think about the component we&#39;re writing currently:  a model validator.  The validator does not (and should not) care how a view model is bound: its only precondition is the view model has been completely bound and is ready to be validated.  So we will temporarily shelve the concerns about how we&#39;ll put first name and last name into the model and just assume they can be put in there for us by some model binder.  </p>
+
+<p>That leaves only one final issue:  how should our rule know that a given field is a first name or last name field?  One way is to provide it with property names (or property names mapped to a view model type) and that would work fine.  It would be implicit though while most model binding and validation is driven explicitly via annotations (of course, the banned phrase validator above is implicit).  Let&#39;s define a <code>CannotUseInPasswordAttribute</code> (with no behavior) that can be placed on any property on the view model that indicates it cannot be part of the password, then have our rule simply find those properties with that annotation and voila, it knows what fields are ineligible.  Each particular annotation will include the error message that should be written into the model state error (so the message for first name and last name could be different).  </p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp"> <span class="k">public</span> <span class="k">class</span> <span class="nc">CannotUseInPasswordAttribute</span> <span class="p">:</span> <span class="n">Attribute</span> 
+    <span class="p">{</span>
+        <span class="k">private</span> <span class="kt">string</span> <span class="n">errorMessage</span><span class="p">;</span>
+
+        <span class="k">public</span> <span class="kt">string</span> <span class="n">ErrorMessage</span>
+        <span class="p">{</span>
+            <span class="k">get</span>
+            <span class="p">{</span>
+                <span class="c1">// elided - get from message resource type and name</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="kt">string</span> <span class="n">ErrorMessageResourceName</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+
+        <span class="k">public</span> <span class="n">Type</span> <span class="n">ErrorMessageResourceType</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+    <span class="p">}</span>
+
+
+ <span class="k">public</span> <span class="k">class</span> <span class="nc">CannotUseInPasswordAttributeValuesNotAllowed</span> <span class="p">:</span> <span class="n">IAllowPassword</span>
+    <span class="p">{</span>
+        <span class="k">public</span> <span class="nf">CannotUseInPasswordAttributeValuesNotAllowed</span><span class="p">(</span><span class="kt">object</span> <span class="n">viewModel</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">this</span><span class="p">.</span><span class="n">ViewModel</span> <span class="p">=</span> <span class="n">viewModel</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="kt">object</span> <span class="n">ViewModel</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+
+        <span class="k">public</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">&gt;</span> <span class="n">IsAllowed</span><span class="p">(</span><span class="kt">string</span> <span class="n">possiblePassword</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="kt">var</span> <span class="n">errorPhrases</span> <span class="p">=</span> <span class="n">GetErrorPhrases</span><span class="p">();</span>
+
+            <span class="kt">var</span> <span class="n">errors</span> <span class="p">=</span> <span class="n">errorPhrases</span><span class="p">.</span><span class="n">Select</span><span class="p">(</span><span class="n">a</span> <span class="p">=&gt;</span> <span class="n">a</span><span class="p">.</span><span class="n">IsBanned</span><span class="p">(</span><span class="n">possiblePassword</span><span class="p">)).</span><span class="n">Where</span><span class="p">(</span><span class="n">a</span> <span class="p">=&gt;</span> <span class="p">!</span><span class="kt">string</span><span class="p">.</span><span class="n">IsNullOrEmpty</span><span class="p">(</span><span class="n">a</span><span class="p">));</span>
+
+            <span class="k">return</span> <span class="n">errors</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">private</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">ErrorPhrase</span><span class="p">&gt;</span> <span class="n">GetErrorPhrases</span><span class="p">()</span>
+        <span class="p">{</span>
+            <span class="kt">var</span> <span class="n">viewModelProperties</span> <span class="p">=</span> <span class="k">this</span><span class="p">.</span><span class="n">ViewModel</span>
+                                          <span class="p">.</span><span class="n">GetType</span><span class="p">()</span>
+                                          <span class="p">.</span><span class="n">GetProperties</span><span class="p">();</span>
+
+            <span class="kt">var</span> <span class="n">cannotUseProperties</span> <span class="p">=</span> <span class="n">viewModelProperties</span><span class="p">.</span><span class="n">Where</span><span class="p">(</span><span class="n">a</span> <span class="p">=&gt;</span> <span class="n">Attribute</span><span class="p">.</span><span class="n">IsDefined</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="k">typeof</span><span class="p">(</span><span class="n">CannotUseInPasswordAttribute</span><span class="p">)));</span>
+
+            <span class="kt">var</span> <span class="n">errorPhrases</span> <span class="p">=</span> <span class="n">cannotUseProperties</span><span class="p">.</span><span class="n">Select</span><span class="p">(</span><span class="n">a</span> <span class="p">=&gt;</span> <span class="k">new</span>
+            <span class="p">{</span>
+                <span class="n">PropertyValue</span> <span class="p">=</span> <span class="n">a</span><span class="p">.</span><span class="n">GetValue</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="n">ViewModel</span><span class="p">,</span> <span class="k">null</span><span class="p">)</span> <span class="k">as</span> <span class="kt">string</span><span class="p">,</span>
+                <span class="n">ErrorMessage</span> <span class="p">=</span> <span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">GetCustomAttributes</span><span class="p">(</span><span class="k">typeof</span><span class="p">(</span><span class="n">CannotUseInPasswordAttribute</span><span class="p">),</span> <span class="k">false</span><span class="p">).</span><span class="n">First</span><span class="p">()</span> <span class="k">as</span> <span class="n">CannotUseInPasswordAttribute</span><span class="p">).</span><span class="n">ErrorMessage</span>
+            <span class="p">})</span>
+                                                  <span class="p">.</span><span class="n">Where</span><span class="p">(</span><span class="n">a</span> <span class="p">=&gt;</span> <span class="n">a</span><span class="p">.</span><span class="n">PropertyValue</span> <span class="p">!=</span> <span class="k">null</span><span class="p">)</span>
+                                                  <span class="p">.</span><span class="n">Select</span><span class="p">(</span><span class="n">a</span> <span class="p">=&gt;</span> <span class="k">new</span> <span class="n">ErrorPhrase</span>
+                                                  <span class="p">{</span>
+                                                      <span class="n">BannedPhrase</span> <span class="p">=</span> <span class="n">a</span><span class="p">.</span><span class="n">PropertyValue</span><span class="p">,</span>
+                                                      <span class="n">ErrorMessage</span> <span class="p">=</span> <span class="n">a</span><span class="p">.</span><span class="n">ErrorMessage</span>
+                                                  <span class="p">});</span>
+
+            <span class="k">return</span> <span class="n">errorPhrases</span><span class="p">;</span>
+
+        <span class="p">}</span>
+
+        <span class="k">private</span> <span class="k">class</span> <span class="nc">ErrorPhrase</span>
+        <span class="p">{</span>
+            <span class="k">public</span> <span class="kt">string</span> <span class="n">BannedPhrase</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+            <span class="k">public</span> <span class="kt">string</span> <span class="n">ErrorMessage</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+
+            <span class="k">public</span> <span class="kt">string</span> <span class="nf">IsBanned</span><span class="p">(</span><span class="kt">string</span> <span class="n">possiblePassword</span><span class="p">)</span>
+            <span class="p">{</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">possiblePassword</span><span class="p">.</span><span class="n">ContainsIgnoreCase</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="n">BannedPhrase</span><span class="p">))</span>
+                    <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="n">ErrorMessage</span><span class="p">;</span>
+
+                <span class="k">return</span> <span class="k">null</span><span class="p">;</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+</code></pre></div>
+<p>At this point, we can update our view models to have the <code>CannotUseInPasswordAttribute</code> attribute (in our case, there&#39;s 4 of them at this point) and everything will work (assuming first name and last name get populated, which we&#39;ll deal with separately). </p>
+
+<p>I went straight to showing the final code, but it developed over time from unit tests.  Below is one such test (using xUnit data theories)</p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp"><span class="na">[Theory]</span>
+<span class="na">        [InlineData(&quot;$ome1234phrase&quot;)]</span>
+<span class="na">        [InlineData(&quot;phrase$something&quot;)]</span>
+<span class="na">        [InlineData(&quot;Containsphraseend&quot;)]</span>
+<span class="na">        [InlineData(&quot;differentPHRASEcase&quot;)]</span>
+        <span class="k">public</span> <span class="k">void</span> <span class="nf">ReportsError_WhenPasswordContainsValue_FromOtherAnnotatedProperty</span><span class="p">(</span><span class="kt">string</span> <span class="n">possiblePassword</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="kt">var</span> <span class="n">viewModel</span> <span class="p">=</span> <span class="k">new</span> <span class="n">SingleCannotUsePropertyViewModel</span> <span class="p">{</span> <span class="n">CannotUse</span><span class="p">=</span><span class="s">&quot;phrase&quot;</span> <span class="p">};</span>
+
+            <span class="kt">var</span> <span class="n">sut</span> <span class="p">=</span> <span class="k">new</span> <span class="n">CannotUseInPasswordAttributeValuesNotAllowed</span><span class="p">(</span><span class="n">viewModel</span><span class="p">);</span>
+
+            <span class="kt">var</span> <span class="n">allowed</span> <span class="p">=</span> <span class="n">sut</span><span class="p">.</span><span class="n">IsAllowed</span><span class="p">(</span><span class="n">possiblePassword</span><span class="p">);</span>
+
+            <span class="n">Assert</span><span class="p">.</span><span class="n">True</span><span class="p">(</span><span class="n">allowed</span><span class="p">.</span><span class="n">Count</span><span class="p">()</span> <span class="p">==</span> <span class="m">1</span><span class="p">);</span>
+            <span class="n">Assert</span><span class="p">.</span><span class="n">Equal</span><span class="p">(</span><span class="n">ErrorMessages</span><span class="p">.</span><span class="n">CannotUse</span><span class="p">,</span> <span class="n">allowed</span><span class="p">.</span><span class="n">First</span><span class="p">());</span>            
+        <span class="p">}</span>
+</code></pre></div>
+<p>This concludes how we used a custom model validator to ensure a password doesn&#39;t contain certain proscribed text.  In the next post, we will explore how we extending model binding to actually populate the necessary first and last name properties on the view models.</p>
+ 
+    </p>
   
 </div>
 
@@ -63,12 +297,12 @@
         	<a class="active" href="//index.html">Home</a>
         </li>
         
+        <li>
+        	<a  href="//posts.html">Posts</a>
+        </li>
+        
     </ul>
 </nav>-->
-
-<div id="footer">
-    Copyright 2014 | Daniel Longest
-</div>
 
 </body>
 </html>

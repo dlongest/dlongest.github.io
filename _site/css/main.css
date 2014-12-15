@@ -62,8 +62,10 @@ textarea {
    ========================================================================== */
 
 body {
-    font: 16px/26px 'Droid Serif', serif;
+    font: 1.25em/1.75em 'Droid Serif', serif;
     color: #444444;
+    width: 55%;
+    margin: 0 auto; /* 6/7/14 */
 }
 
 .wrapper {
@@ -104,6 +106,10 @@ nav ul {
     padding: 0;
 }
 
+nav ul li {
+    float: left;
+}
+
 nav a {
     display: block;
     margin-bottom: 10px;
@@ -113,17 +119,16 @@ nav a {
     text-decoration: none;
     font-weight: bold;
 
-    color: white;
-    background: #e44d26;
+    color: #444444;;
 }
 
 nav a:hover,
 nav a:visited {
-    color: white;
+color: #58A621;
 }
 
 nav a:hover {
-    text-decoration: underline;
+    text-decoration: none;
 }
 
 /* ==============
@@ -161,8 +166,16 @@ nav a:hover {
    ========================================================================== */
 
 h1, h2, h3, h4, h5, h6 {
-    color: #031D40;
+    color: #444444;
     line-height: 150%;
+}
+
+h1 {
+    font-size: 2.25em;
+}
+
+h2 {
+    font-size: 1.65em;
 }
 
 a {
@@ -183,6 +196,12 @@ img {
     height: auto;
 }
 
+#logo {   /* 6/7/14 */
+    float: left;
+    width: 150px;
+    height: 150px;  
+}
+
 .lt-gray-bg {
     background-color: #f1f1f1;
 }
@@ -199,14 +218,20 @@ a h1:hover {
     border-bottom: 1px dashed #444444;
 }
 
+.posts-list p {
+    padding: 1em 0;
+}
 
+#footer {
+    clear: both;
+    font-size: .65em;
+    margin-bottom: 2em;
+}
 
-
-
-
-
-
-
+.highlight {
+    padding: .75em;
+    background-color: #031d40;
+}
 
 
 /* ==========================================================================
@@ -219,6 +244,10 @@ a h1:hover {
     INTERMEDIATE: Menu
    ==================== */
 
+    nav {
+        clear: both;
+    }
+    
     nav a {
         float: left;
         width: 27%;
@@ -234,6 +263,10 @@ a h1:hover {
     nav li:last-child a {
         margin-right: 0;
     }
+    
+    .main-content {
+    height: 32em;
+	}
 
 /* ========================
     INTERMEDIATE: IE Fixes
@@ -249,6 +282,10 @@ a h1:hover {
 }
 
 @media only screen and (min-width: 768px) {
+
+.main-content {
+    height: 30em;
+	}
 
 /* ====================
     WIDE: CSS3 Effects
@@ -270,8 +307,8 @@ a h1:hover {
     }
 
     nav {
-        float: right;
-        width: 38%;
+        float: left;
+        width: 78%;
     }
 
 /* ============
@@ -291,6 +328,10 @@ a h1:hover {
 
 @media only screen and (min-width: 1140px) {
 
+.main-content {
+    height: 29em;
+	}
+
 /* ===============
     Maximal Width
    =============== */
@@ -298,6 +339,11 @@ a h1:hover {
     .wrapper {
         width: 1026px; /* 1140px - 10% for margins */
         margin: 0 auto;
+    }
+    
+    nav {
+        clear: none;
+        margin-top: 2em;
     }
 }
 
