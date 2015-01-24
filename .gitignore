@@ -15,3 +15,4 @@ Packages.dgml
 *.vsmdi
 *.testrunconfig
 _site/**
+_site/*
