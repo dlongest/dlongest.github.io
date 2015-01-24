@@ -266,7 +266,7 @@ I went straight to showing the final code, but it developed over time from unit 
         }
 ````
 
-This concludes how we used a custom model validator to ensure a password doesn't contain certain proscribed text.  In the next post, we will explore how we extending model binding to actually populate the necessary first and last name properties on the view models.
+This concludes how we used a custom model validator to ensure a password doesn't contain certain proscribed text.  In the next post, we will explore how we extended model binding to actually populate the necessary first and last name properties on the view models.
 
 
 

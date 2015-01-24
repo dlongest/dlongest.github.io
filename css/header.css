@@ -5,6 +5,7 @@ display: block;
 text-decoration: none;
 font-family: 'Droid Serif', serif;
 font-size: 1.1em;
+width: 100%;
 }
 
 ul a:hover {
