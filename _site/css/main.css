@@ -194,8 +194,16 @@ a:hover, a:focus {
 .aside 
 {
 	float: right;
+	border-left: 5px solid #58A621;
+	border-bottom: 5px solid #58A621;
+	padding-left: 5px;
+	padding-right: 5px;
+	padding-top: 5px;
+	padding-bottom: 100px;
+	margin-left: 10px;
+	margin-bottom: 10px;
+	display: block;
 }
-
 
 
 blockquote 
@@ -211,8 +219,9 @@ blockquote
 
 #portrait 
 {
-	width: 230px;
-	height: 281px;
+	width: 115px;
+	height: 141px;
+	float: right;
 }
 
 #logo {   /* 6/7/14 */

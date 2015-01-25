@@ -2,6 +2,9 @@
 layout: page
 title: About
 ---
+<div id="aside">
+<img id="portrait" src='{{ site.url }}/images/Picture2.jpg' />
+</div>
 <h1>About</h1>
 <div>My name is Daniel Longest and I'm a software developer living in Charlottesville, Virginia.  I work for a not-for-profit in the financial services industry.  Most of my experience is in .NET, particularly back-end services and integration projects, but also web and desktop applications.  This blog will cover a variety of areas, but I'm heavily interested in software design.  I enjoy training other developers so most entries will focus on demonstrating or discussing areas that are weakly covered or confusing, usually drawn from questions I get asked at work.  I train .NET developers at work now and previously was responsible for company-wide SQL training for a wide-ranging audience.  That said, I feel like I learn far more from training others than they learn from me: it's definitely a two-way street.
 </div>

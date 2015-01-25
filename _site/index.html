@@ -2,35 +2,60 @@
 <html>
     <head>
         <meta charset="utf-8">
-        <!--<title>Home</title>-->
-		<link rel="stylesheet" href="/css/normalize.min.css" type="text/css" />
-		<link rel="stylesheet" href="/css/solarized-dark.css" type="text/css"/>
-		<link rel="stylesheet" href="/css/main.css" type="text/css" />
-		<link rel="stylesheet" href="/css/header.css" type="text/css"/>
+        <title>Home</title>
+		
+		 <link href="css/bootstrap.css" rel="stylesheet">
+		 <script type="text/javascript" src="js/jquery.js"></script>
+		<script type="text/javascript" src="js/bootstrap.js"></script>		
+    <!-- Custom CSS -->
+		<link href="css/logo-nav.css" rel="stylesheet" />	
+		<link href="css/custom.css" rel="stylesheet" />
+		<link rel="stylesheet" href="/css/solarized-dark.css" type="text/css"/> 
+
 		<link href='http://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic,700italic' rel='stylesheet' type='text/css' />
     </head>
     <body>
-	<div id="header">
-	<a href="http://dlongest.github.io/" title="Dan Longest's Blog Homepage"><img id="logo" src='/images/logo.png' /></a>
-	<nav>
-	  <ul>
-	    <li><a href="/">Posts</a></li>
-	    <li><a href="#">Categories</a></li>	    
-		<li><a href="#">Recommended</a></li>	    
-	    <li><a href="about.html">About</a></li>
-	  </ul>
-    </nav>
-	</div>
+	 <nav class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+        <div class="container">
+            <!-- Brand and toggle get grouped for better mobile display -->
+            <div class="navbar-header">
+                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                <a class="navbar-brand" href="/">
+                    <img id="logo" src='/images/logo.png' width="125" height="125" />
+                </a>
+            </div>
+            <!-- Collect the nav links, forms, and other content for toggling -->
+            <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
+                <ul class="nav navbar-nav">
+                    <li>
+                        <a href="/about.html">About</a>
+                    </li>
+					  <li>
+                        <a href="#">Categories</a>
+                    </li>      
+                    <li>
+                        <a href="#">Suggested Resources</a>
+                    </li>                   
+                </ul>
+            </div>
+            <!-- /.navbar-collapse -->
+        </div>
+        <!-- /.container -->
+    </nav>	
 
-<div class="aside">
-<img id="portrait" width="230" height="281" src='/images/Picture2.jpg' />
-<h4>Code Like A Champion Today</h4>
-</div>
-    <div class="maincontent">
-      
+<div class="container">
+<div class="row">
+ <div class="col-lg-12">
+          
 	<h2>Extending the MVC Default Model Binder</h2>
-	<em>20 January 2015</em>
-	<p>In the <a href="2014-12-14-writing-a-custom-mvc-model-validator">last post</a>, I talked about authoring custom MVC model validators that can be plugged into MVC&#39;s model validation pipeline.  In this post, I will go into some details on how we used a custom model binder to execute some logic after default model validation, but prior to MVC&#39;s model validation being executed.  </p>
+	<div class="date">20 January 2015</div>	
+	<div class="post">
+	<p>In the <a href="/2014/12/14/writing-a-custom-mvc-model-validator.html">last post</a>, I talked about authoring custom MVC model validators that can be plugged into MVC&#39;s model validation pipeline.  In this post, I will go into some details on how we used a custom model binder to execute some logic after default model validation, but prior to MVC&#39;s model validation being executed.  </p>
 
 <p>In the login application we were writing, there were two cases when we wanted to update the model prior to validation (so that validation would apply), but I didn&#39;t want to write a separate per-type model binder.  In MVC, you can define the application-wide model binder in the application root by doing:</p>
 <div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp"><span class="n">ModelBinders</span><span class="p">.</span><span class="n">Binders</span><span class="p">.</span><span class="n">DefaultBinder</span> <span class="p">=</span> <span class="k">new</span> <span class="n">MyCustomModelBinder</span><span class="p">();</span>
@@ -109,11 +134,12 @@
 if it actually cares to perform an update on the model; if not, it simply does nothing to it.  I&#39;ve omitted the implementations of the <code>IModelUpdate</code> components as they&#39;re pretty application specific, but they are in my <a href="https://gist.github.com/dlongest/387d2ce35fb6f45688b8">Github</a> if you&#39;d like to see them.  </p>
 
 <p>This concludes a look at how we extended MVC to leverage its existing binding and validation functionality while letting us extend it in some pretty unique ways. </p>
- 
-	</p>
+ 	
+	</div>
       
 	<h2>Writing a Custom MVC Model Validator</h2>
-	<em>14 December 2014</em>
+	<div class="date">14 December 2014</div>	
+	<div class="post">
 	<p>The power of ASP.NET MVC is how extensible the framework is, but with this comes a challenge:  in certain cases as a developer you know (or have a feeling) that there is an extension point, but how do you find and use the right one?  In a series of posts, I will explore the myriad extension points in MVC from the perspective of a project I&#39;ve been working on for a few months.  Like most development, every situation has an almost limitless number of options for accomplishing it, but with regards to extending MVC in my experience there is often one &quot;best&quot; choice, the key is being aware of it.  </p>
 
 <p>To establish some context, here&#39;s the project: a login application.  There are thousands (or millions) of these available so why would we be writing our own?  I work for a not-for-profit company and we made the decision to license a popular identity access management (IAM) platform from a vendor and partner with a second company to implement and support it for us.  Initially, there had been no development work planned on our side at all: the implementer would take care of all of it with an out-of-the-box login application configured against various cloud services (provided by the solution vendor, but running in the implementer&#39;s cloud).  However, the OOTB application was not responsive, which was a big deal for us so the decision was made for us to write our own.  Conceptually, this seemed straightforward enough: the login application would (in theory) simply make calls to either a REST service (for logging in) or a SOAP service (for most other identity functions, password resets and the like).  However, over time our custom login application began to accrue more and more functionality as the implementer struggled to support our requirements within the vendor solution.  It is this difficulty supporting some requirements that led us to extending the framework in various ways. </p>
@@ -358,14 +384,16 @@ if it actually cares to perform an update on the model; if not, it simply does n
         <span class="p">}</span>
 </code></pre></div>
 <p>This concludes how we used a custom model validator to ensure a password doesn&#39;t contain certain proscribed text.  In the next post, we will explore how we extended model binding to actually populate the necessary first and last name properties on the view models.</p>
- 
-	</p>
+ 	
+	</div>
   
-</div>
+
 
 
  
-
+	</div>
+</div>
+</div>
 <nav id="pagination">
 <ul>	
     	

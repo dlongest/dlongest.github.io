@@ -3,7 +3,7 @@ layout: post
 title: Extending the MVC Default Model Binder
 tags: MVC, design
 ---
-In the [last post](2014-12-14-writing-a-custom-mvc-model-validator), I talked about authoring custom MVC model validators that can be plugged into MVC's model validation pipeline.  In this post, I will go into some details on how we used a custom model binder to execute some logic after default model validation, but prior to MVC's model validation being executed.  
+In the [last post]({% post_url 2014-12-14-writing-a-custom-mvc-model-validator %}), I talked about authoring custom MVC model validators that can be plugged into MVC's model validation pipeline.  In this post, I will go into some details on how we used a custom model binder to execute some logic after default model validation, but prior to MVC's model validation being executed.  
 
 In the login application we were writing, there were two cases when we wanted to update the model prior to validation (so that validation would apply), but I didn't want to write a separate per-type model binder.  In MVC, you can define the application-wide model binder in the application root by doing:
 
