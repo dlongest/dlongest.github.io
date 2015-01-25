@@ -1,4 +1,56 @@
-<p>Continuing my week of first (after my first blog post), I&#39;ve uploaded my first repository into GitHub.  I&#39;ve contributed some minimal items to some projects, but this is the first one under my own name, which is pretty exciting.  </p>
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>TeamFin - Team Foundation Integration</title>
+		
+		 <link href="/css/bootstrap.css" rel="stylesheet">
+		 <script type="text/javascript" src="/js/jquery.js"></script>
+		<script type="text/javascript" src="/js/bootstrap.js"></script>		
+    <!-- Custom CSS -->
+		<link href="/css/logo-nav.css" rel="stylesheet" />	
+		<link href="/css/custom.css" rel="stylesheet" />
+		<link rel="stylesheet" href="/css/solarized-dark.css" type="text/css"/> 
+
+		<link href='http://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic,700italic' rel='stylesheet' type='text/css' />
+    </head>
+    <body>
+	 <nav class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+        <div class="container">
+            <!-- Brand and toggle get grouped for better mobile display -->
+            <div class="navbar-header">
+                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                <a class="navbar-brand" href="/">
+                    <img id="logo" src='/images/logo.png' width="125" height="125" />
+                </a>
+            </div>
+            <!-- Collect the nav links, forms, and other content for toggling -->
+            <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
+                <ul class="nav navbar-nav">
+                    <li>
+                        <a href="/about.html">About</a>
+                    </li>
+					  <li>
+                        <a href="#">Categories</a>
+                    </li>                                       
+                </ul>
+            </div>
+            <!-- /.navbar-collapse -->
+        </div>
+        <!-- /.container -->
+    </nav>	
+
+<div class="container">
+<div class="row">
+ <div class="col-lg-12">	
+	<h2>TeamFin - Team Foundation Integration</h2>
+	<div class="date">20 March 2014</div>	
+    <p>Continuing my week of first (after my first blog post), I&#39;ve uploaded my first repository into GitHub.  I&#39;ve contributed some minimal items to some projects, but this is the first one under my own name, which is pretty exciting.  </p>
 
 <p>I&#39;ve named it TeamFin, short for Team Foundation Integration.  There are a few similar packages I&#39;ve seen out there, but none that seemed quite what I was after.  At work, my boss mentioned to me &quot;It would be great if we could have something we could run after someone creates a new work item in TFS that automatically creates some other work items.&quot;  So the most common example is if we create an Epic, we will generally also create an Architectural Review item to it.  There are very few Epics that don&#39;t undergo such a review so the point was to save some time and ensure all items receive their child tasks consistently so I volunteered to take it on.</p>
 
@@ -13,3 +65,16 @@
 <p>Despite my boss&#39; instructions on what needed to be done (work item creation), I felt that a key feature was the ability to identify items that were missing specific child items (such as Epics that didn&#39;t have Architectural Review items attached) so I worked first on getting the querying features functional.  The most tedious part was figuring out the TFS schema as there isn&#39;t much documentation. Ultimately the easiest route was to just dump every field in the schema into text files (programmatically), then look through those to determine the underlying field names and allowed values.  Once that was done, it was simply a matter of crafting a Visitor to walk an expression against my custom TfsWorkItem (a wrapper around the native WorkItem) and generate the SQL.  </p>
 
 <p>There&#39;s plenty of features left to implement, but I look forward to adding to it over the next few months if only as an exercise for myself.  If others stumble across it and find any value in it, even as a reference, that would be great too.</p>
+
+	</div>
+</div>
+</div>
+<nav id="pagination">
+<ul>	
+    	
+     
+</ul>
+  </nav>
+	
+</body>
+</html>
