@@ -1,0 +1,15 @@
+.row 
+{
+ font: 1.25em/1.75em 'Droid Serif', serif;  
+}
+
+#aside
+{
+float: right;
+}
+
+.date
+{
+	font-style: italic;
+	margin-bottom: 25px;		
+}
