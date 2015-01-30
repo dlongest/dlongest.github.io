@@ -2,6 +2,7 @@
 layout: post
 title: Controlling collection name deserialization in .NET
 tags: general
+description: How I controlled XML serialization of collections from a vendor-supplied XML payload as it's an easy thing to forget.
 ---
 It's not a thing I do often, but I found myself the other day needing to control XML serialization and deserialization.  Most of the time we just generate things like service proxies and don't alter the XML after that.  This case was a bit different as we have a vendor that is supplying us with an SAAS implementation for IAM and I'm managing the implementation on our side of an MVC application to handle login and some related identity services. 
 

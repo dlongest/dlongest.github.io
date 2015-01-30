@@ -2,6 +2,7 @@
 layout: post
 title: Extending the MVC Default Model Binder
 tags: MVC, design
+description: Explore when the MVC model validation gets run during model binding and how can you hook into the binder before then for extension purposes.  
 ---
 In the [last post]({% post_url 2014-12-14-writing-a-custom-mvc-model-validator %}), I talked about authoring custom MVC model validators that can be plugged into MVC's model validation pipeline.  In this post, I will go into some details on how we used a custom model binder to execute some logic after default model validation, but prior to MVC's model validation being executed.  
 

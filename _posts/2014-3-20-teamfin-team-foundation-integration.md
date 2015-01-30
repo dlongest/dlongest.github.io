@@ -2,6 +2,7 @@
 layout: post
 title: TeamFin - Team Foundation Integration
 tags: design
+description: A library I wrote for integrating with the Team Foundation Server API for work item querying.
 ---
 Continuing my week of first (after my first blog post), I've uploaded my first repository into GitHub.  I've contributed some minimal items to some projects, but this is the first one under my own name, which is pretty exciting.  
 

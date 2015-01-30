@@ -2,6 +2,7 @@
 layout: post
 title: Writing a Custom MVC Model Validator
 tags: MVC, design
+description: Selecting and implementing the right MVC extension point for a requirement can be tricky without experience.  Here is the thought process behind a custom model validator. 
 ---
 The power of ASP.NET MVC is how extensible the framework is, but with this comes a challenge:  in certain cases as a developer you know (or have a feeling) that there is an extension point, but how do you find and use the right one?  In a series of posts, I will explore the myriad extension points in MVC from the perspective of a project I've been working on for a few months.  Like most development, every situation has an almost limitless number of options for accomplishing it, but with regards to extending MVC in my experience there is often one "best" choice, the key is being aware of it.  
 

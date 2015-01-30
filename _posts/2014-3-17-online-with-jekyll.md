@@ -2,6 +2,7 @@
 layout: post
 title: Online With Jekyll
 tags: general
+description: How I set up Jekyll on Windows 7 machine in a handful of easy, precise steps. 
 ---
 This is the inaugural entry in my blog covering various software development topics, especially related to code design and dev practices.  To kick this off, I'm going to briefly describe the steps I had to follow to get Jekyll Bootstrap online on Windows 7 as I had a bit of trouble that some of the excellent tutorials didn't quite cover.
 

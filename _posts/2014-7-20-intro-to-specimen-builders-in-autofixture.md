@@ -2,6 +2,7 @@
 layout: post
 title: Introduction to Custom Specimen Builders in AutoFixture
 tags: unit testing
+description: Our first dive into AutoFixture extension with an exploration of how and why to use a custom Specimen Builder.
 ---
 It is no secret at work that I greatly admire Mark Seemann.  Anyone that comes to me and asks about software design I steer them right to his book "Dependency Injection in .NET".  In some respects, the title does it a bit of a disservice as at least half of it discusses some critical component design practices that apply regardless of whether one wants to use dependency injection.  Don't get me wrong, he covers dependency injection quite comprehensively, but there's a lot more to DI than just picking a container.  Beyond his book, Mark is an incredibly accessible guy in a couple respects.  One, he blogs pretty regularly and has a lot of incredible posts on design, I find myself going back to them again and again.  And two, he is the author of AutoFixture, which needs almost no introduction in the .NET world.  And it is this library that is the subject of this post. 
 
