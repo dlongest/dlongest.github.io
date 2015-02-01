@@ -44,7 +44,7 @@ Most of my experience has been on internal line-of-business applications on the 
 </ul>
 </div>
 <h2>Contact</h2>
-I can be reached by email at dlongest@gmail.com if you have comments, critiques, questions, or basically anything. 
+I can be reached by email at daniel@longest.io if you have comments, critiques, questions, or basically anything. 
 <p>
 <a href="https://twitter.com/danlongest" class="twitter-follow-button" data-show-count="false">Follow @danlongest</a>
 <script>!function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0],p=/^http:/.test(d.location)?'http':'https';if(!d.getElementById(id)){js=d.createElement(s);js.id=id;js.src=p+'://platform.twitter.com/widgets.js';fjs.parentNode.insertBefore(js,fjs);}}(document, 'script', 'twitter-wjs');</script>
