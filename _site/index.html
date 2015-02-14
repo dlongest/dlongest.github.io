@@ -49,148 +49,268 @@
 <div class="row">
  <div class="col-lg-12">		
           
-	<h2>Code Like A Champion Launched</h2>
-	<div class="date">27 January 2015</div>	
+	<h2>Logging Correlation Identifiers in ASP.NET MVC</h2>
+	<div class="date">14 February 2015</div>	
 	<div class="post">
-	<p>Almost a year since I first installed Jekyll and produced a few entries, followed by design work by a now former colleague of mine, and recently many hours of hacking on stylesheets, I&#39;m happy to finally officially launch <em>Code Like A Champion</em>, a blog focused on system design and  software development practices particularly in the .NET arena.  There&#39;s thousands of such blogs on the Internet (maybe millions): what makes this one special?  Well there&#39;s actually one primary focus of this blog that hasn&#39;t been mentioned yet, one that is vital not just to the practice of developing software professionally but to being a successful professional in any field.  But before the great unveiling, allow me a digression.   </p>
+	<p>Over the months we&#39;ve been writing a new login application against a cloud SaaS platform, we have slowly evolved our logging strategy for the application.  The evolution occurred because we needed more and more information for diagnostics and triage related to bugs (sometimes in our custom application, often in the vendor product too) and performance issues.  Some of the logging we employed that wrote into the event log on the login app server (of which there are 2) included:</p>
 
-<p>The art and profession of software development has developed (no pun intended) a bit of a bad name in some ways.  The media salivates over reports of sexism, racism, intolerance, and just general jerkiness emanating from hotshot young devs at big name software firms.  Some of that is just a numbers game:  given a large group of people in any field, some of them will be unsavory characters (so-called brogrammers&quot;).  But in terms of such a group, those attitudes are not dissimilar from another group of highly paid, fairly immature individuals who have spent a number of years being courted, wooed, and just generally made to feel like they are a cut above: pro athletes. Most of us can&#39;t imagine what it&#39;s like to throw a touchdown pass on a field with 80,000 people watching any more than we can what it likes to cash in 7 figures worth of stock options. But the point of this post and this blog is not to dwell on things out of our control.  In contrast, this blog is about really one topic:  being a champion.  </p>
+<ul>
+<li>Call times for the vendor services (SOAP and REST) as Windsor interceptors</li>
+<li>Communication exceptions trying to reach the vendor services as Windsor interceptors</li> 
+<li>Raw SOAP request and response messages as WCF behavior on the client proxy</li>
+<li>Primary error page with reference ID shown to user as controller-view</li>
+</ul>
 
-<h3>What does it mean to be a champion?</h3>
+<p>These error messages have been incredibly useful.  The call times have driven a lot of performance testing and improvements that have been put in place (coupled with a separate application I wrote to crunch the call times, which I might present separately).  The raw SOAP request/responses have been useful because many bugs come down to the vendor asking what was returned by their system (presumption being we were handling it wrong), but the responses often showed a &quot;smoking gun&quot; that the response was missing key information.  </p>
 
-<p>So I&#39;m sure this question has struck you by now, if not earlier:  what does he mean be a champion and isn&#39;t that the same macho attitude he just railed against?  Being a champion has nothing to do with arrogance or intolerance, it isn&#39;t a function of rich or poor, of a high title or an entry-level one, of being an expert in a field or a novice.  And most importantly, being a champion is not a matter of wins and losses.  </p>
+<p>Recently as we&#39;ve fought hard to move to deployment, I realized that there was a bit of an oversight in the logging:  while it wasn&#39;t too hard to trace backward through the log to identify a series of messages within a given use-case, it isn&#39;t the kind of thing anyone could do without a lot more knowledge of the platform calls (knowledge my team had gained over the last 9 months).  But there seemed conceptually a pretty simple solution to this problem:  all we needed was a way to correlate the log messages for a user within a single session.  I&#39;m not even interested in tracking the user across multiple different sessions (although if that happens, fine).  I principally just want a way that if creating an account requires transitioning through 3 or 4 screens and that causes 8-10 log messages (with everything turned up), we can tie those log messages together as a matter of rote.  </p>
 
-<p>Well then, what is it?  Let&#39;s hear from some experts in the field first.</p>
+<p>Obviously lots of ways to do this but the below will present one way I&#39;ve gone about it.  First, we have in place this logging interface:</p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">  <span class="k">public</span> <span class="k">interface</span> <span class="n">ILog</span>
+    <span class="p">{</span>
+        <span class="k">void</span> <span class="nf">Log</span><span class="p">(</span><span class="kt">string</span> <span class="n">message</span><span class="p">);</span>
+        <span class="k">void</span> <span class="nf">Log</span><span class="p">(</span><span class="kt">string</span> <span class="n">message</span><span class="p">,</span> <span class="n">Exception</span> <span class="n">ex</span><span class="p">);</span>
+        <span class="k">void</span> <span class="nf">Log</span><span class="p">(</span><span class="kt">string</span> <span class="n">message</span><span class="p">,</span> <span class="kt">object</span> <span class="n">obj</span><span class="p">);</span>
+        <span class="k">void</span> <span class="nf">Log</span><span class="p">(</span><span class="kt">string</span> <span class="n">message</span><span class="p">,</span> <span class="n">Exception</span> <span class="n">ex</span><span class="p">,</span> <span class="kt">object</span> <span class="n">obj</span><span class="p">);</span>
+    <span class="p">}</span>
+</code></pre></div>
+<p>This interface is actually just a wrapper around an in-house logging library we have; this one closes over that type (which requires basically an event ID be provided) so that components in the application can be agnostic to the event ID they&#39;re using, which is configured by Windsor in the root.</p>
 
-<blockquote>"We will either find a way, or make one." - Hannibal, <em>Carthaginian general</em></blockquote>
+<p>That yields this basic implementation that we inject throughout the application to components that are logging-aware:</p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp"><span class="k">public</span> <span class="k">class</span> <span class="nc">EventIdEnclosingLogger</span> <span class="p">:</span> <span class="n">ILog</span>
+    <span class="p">{</span>
+        <span class="k">private</span> <span class="n">ILogger</span><span class="p">&lt;</span><span class="kt">object</span><span class="p">&gt;</span> <span class="n">logger</span><span class="p">;</span>
+        <span class="k">private</span> <span class="n">EventId</span> <span class="n">eventId</span><span class="p">;</span>
 
-<blockquote>"The spirit, the will to win, and the will to excel are the things that endure. These qualities are so much more important than the events that occur."  - Vince Lombardi, <em>legendary football coach</em></blockquote>
+        <span class="k">public</span> <span class="nf">EventIdEnclosingLogger</span><span class="p">(</span><span class="n">ILogger</span><span class="p">&lt;</span><span class="kt">object</span><span class="p">&gt;</span> <span class="n">logger</span><span class="p">,</span> <span class="n">EventId</span> <span class="n">eventId</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">this</span><span class="p">.</span><span class="n">logger</span> <span class="p">=</span> <span class="n">logger</span><span class="p">;</span>
+            <span class="k">this</span><span class="p">.</span><span class="n">eventId</span> <span class="p">=</span> <span class="n">eventId</span><span class="p">;</span>
+        <span class="p">}</span>
 
-<blockquote>"The greatest reward for doing is the opportunity to do more." - Jonas Salk, <em>discovered first polio vaccine</em></blockquote>
+        <span class="k">public</span> <span class="k">virtual</span> <span class="k">void</span> <span class="nf">Log</span><span class="p">(</span><span class="kt">string</span> <span class="n">message</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">this</span><span class="p">.</span><span class="n">logger</span><span class="p">.</span><span class="n">Log</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="k">this</span><span class="p">.</span><span class="n">eventId</span><span class="p">);</span>
+        <span class="p">}</span>
 
-<blockquote>"The successful warrior is the average man, with laser-like focus"
- - Bruce Lee, <em>champion martial artist and actor</em></blockquote>
+        <span class="k">public</span> <span class="k">virtual</span> <span class="k">void</span> <span class="nf">Log</span><span class="p">(</span><span class="kt">string</span> <span class="n">message</span><span class="p">,</span> <span class="kt">object</span> <span class="n">obj</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">this</span><span class="p">.</span><span class="n">logger</span><span class="p">.</span><span class="n">Log</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="k">this</span><span class="p">.</span><span class="n">eventId</span><span class="p">);</span>
+        <span class="p">}</span>
 
-<blockquote>"Start where you are.  Do what you can.  Use what you have."
-- Arthur Ashe, <em>tennis player</em></blockquote> 
+        <span class="k">public</span> <span class="k">virtual</span> <span class="k">void</span> <span class="nf">Log</span><span class="p">(</span><span class="kt">string</span> <span class="n">message</span><span class="p">,</span> <span class="n">Exception</span> <span class="n">ex</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">this</span><span class="p">.</span><span class="n">logger</span><span class="p">.</span><span class="n">Log</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">ex</span><span class="p">,</span> <span class="k">this</span><span class="p">.</span><span class="n">eventId</span><span class="p">);</span>
+        <span class="p">}</span>
 
-<blockquote>"We are what we repeatedly do. Excellence, then, is not an act, but a habit."
--Aristotle, <em>philosopher</em></blockquote>
+        <span class="k">public</span> <span class="k">virtual</span> <span class="k">void</span> <span class="nf">Log</span><span class="p">(</span><span class="kt">string</span> <span class="n">message</span><span class="p">,</span> <span class="n">Exception</span> <span class="n">ex</span><span class="p">,</span> <span class="kt">object</span> <span class="n">obj</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">this</span><span class="p">.</span><span class="n">logger</span><span class="p">.</span><span class="n">Log</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">ex</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="k">this</span><span class="p">.</span><span class="n">eventId</span><span class="p">);</span>
+        <span class="p">}</span>       
+    <span class="p">}</span>
+</code></pre></div>
+<p>So given that I have a logging abstraction, what&#39;s an easy way I can introduce a a correlation ID into the mesages?  A decorator!  In case you&#39;re not aware, a decorator pattern allows the addition of functionality on top of an existing component.  So from the above types, I could define:</p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="k">public</span> <span class="n">CorrelatingLogger</span> <span class="p">:</span> <span class="n">ILog</span>
+    <span class="p">{</span>
 
-<blockquote>"Accept the challenges, so that you may feel the exhilaration of victory." - <em>General George S. Patton</em></blockquote>
+        <span class="k">private</span> <span class="k">readonly</span> <span class="n">ILog</span> <span class="n">logger</span><span class="p">;</span>
 
-<p><img src="/images/winners-vs-losers.png"  /></p>
+        <span class="c1">//// elided</span>
+    <span class="p">}</span>
+</code></pre></div>
+<p>So an ILog implementation is injected into the CorrelatingLogger, which can then enrich the parameters before calling into the inner logger implementation.  Mulitple layers of decorators can be applied, with the innermost implmentation finally doing the job.  But given our use of Windsor and interceptors, an interceptor was again the natural choice here.  That doesn&#39;t really alter the philosophy being employed here at all, just leverages the Windsor infrastructure.  </p>
 
-<h3>I don&#39;t play sports for a living, how does this help me?</h3>
+<p>So this part probably makes sense, but I haven&#39;t answered the key question:  where am I getting the correlation IDs from and how will those be managed?  We could imbue the logging interceptor with the ability to manage the correlation IDs for us, but that feels like a single-responsibility violation: it should be responsible for computing appropriate log messages based on the correlation ID, not managing them.  Enter a new abstraction:  ICorrelationProvider.</p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="k">public</span> <span class="k">interface</span> <span class="n">ICorrelationProvider</span>
+    <span class="p">{</span>
+        <span class="kt">string</span> <span class="nf">GetCorrelationIdentifier</span><span class="p">();</span>
+    <span class="p">}</span>
+</code></pre></div>
+<p>Simple enough, how will we power it?  Okay, now for the real debate.  First, the application is not backed by a database or store of its own (all of that being offloaded to the vendor stack) so no help there.  The most natural mechanism to pass state around during a single request is <code>HttpContext.Items</code>, which is a dictionary only available to the currently executing request (i.e. thread local, so there&#39;s no interference between other executing requests).  So that will work fine as storage during the request, but how will we ensure continuity of IDs across requests?  Simple enough we can use our good friend the cookie.  It&#39;s arguable we could/should have used Session, and that&#39;s a legitimate argument, but like I said, this is just one way to do it.  </p>
 
-<p>Well first, most of the quotes above were not from a sports figure at all.  Hannibal, the famous general, led his men from Carthage (in north Africa) through Europe and into Italy where he spent years fighting Rome.  Rome, the greatest city on Earth, sought Hannibal&#39;s destruction, but even with him thousands of miles from home, they were unable to defeat the great general and his army (at least directly).  Hannibal led his men on a march through the freezing Alps en route to Rome because he refused to be conquered and because he instilled this spirit and trust in his men.  Jonas Salk discovered the first polio vaccine.  For most people, that&#39;s a lifetime achievement, an opportunity to rest on one&#39;s laurels.  But not to Salk, who pressed forward to eradicate polio and turn his attention to other conditions.  </p>
+<p>We&#39;ve now identified that we will use a cookie to manage the correlation IDs between requests and we will essentially load it into <code>HttpContext.Items</code> at the first opportunity during a request.  I considered overriding the <code>Initialize</code> method in the controller and having that manage the state for me, but that spread out knowledge of the correlation ID key to two places:  the controller and the correlation provider.  After initially implementing it that way, I realized that piece of knowledge had to be in one place so I switched to the below implementation.</p>
 
-<h3>Okay, okay, I get it.  So what&#39;s a champion software developer?</h3>
+<p>A few notes for the code you&#39;ll see below:</p>
 
-<p>Being a champion in any field, to me, is about one thing: attitude.  I have known a lot of incredibly talented people who were thwarted at every turn by their own attitudes.  Attitude in this context includes a lot of things.  Some people pride themselves on being &quot;realists&quot; and &quot;telling it like it is&quot;, at least in their own minds.  But it generally takes a minimal amount of skill to point out the problems and issues with something.  And it takes less skill than that to continually harp on issues.  But champions view problems as opportunities:  an opportunity to do something new or different, an opportunity to push the boundaries.  </p>
+<ul>
+<li>We inject a lambda to provide us with the `HttpContextBase`, not the `HttpContext` itself since at the point when the provider is created, I have been burned by the context not being fully formed. Instead, we use the lambda as it's not until execution (when the context will be fully formed) that we actually need it.</li>
+<li>We prioritize the value in the cookie over the one in Items so if there's a discrepancy for any reason, we allow the cookie to dictate whether we create a new ID (a GUID) and load it into Items or not.</li>
+<li>If for some reason an exception is thrown while trying to create, obtain, or update the correlation ID, we will swallow it and return a hard-coded value.  This will let our system functionality continue unabated and make it obvious there's been an issue in the logging.  Hopefully though all such issues will be ironed out in development anyway, but we do not want the live functionality rendered unusuable simply because the log messages don't get this extra value.</li>
+<li>GetCorrelationId violates CQS:  it both mutates system state (by adding/updating a cookie and items) and returns a value.  I felt the violation in this case was acceptable as it made the client code easier to follow.</li>
+</ul>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="k">public</span> <span class="k">class</span> <span class="nc">HttpContextCorrelationProvider</span> <span class="p">:</span> <span class="n">ICorrelationProvider</span>
+    <span class="p">{</span>
+        <span class="k">private</span> <span class="k">readonly</span> <span class="n">Func</span><span class="p">&lt;</span><span class="n">HttpContextBase</span><span class="p">&gt;</span> <span class="n">httpContext</span><span class="p">;</span>
+        <span class="k">private</span> <span class="k">readonly</span> <span class="kt">string</span> <span class="n">correlationKey</span><span class="p">;</span>
 
-<p>Sometimes attitude is in the view of one&#39;s job, often expressed as &quot;I do X and you do Y.&quot;  But in the software development teams I&#39;ve been on, ultra-specialization is a negative, not a positive.  Yes, there is definite value in knowing something at a deep level, but I&#39;m talking about someone who will only do one particular job with no mind to go outside of it.  In the Agile teams that are more and more common today, there is little room for someone not willing to go outside their current skillset, but I see it too often.  Why are otherwise smart people so resistant to this?  Lot of reasons, but the most common one I&#39;ve observed is the fear of being a novice.  Expertise in something is hard won and many people are loathe to give it up, to return to being a beginner, to struggle and to risk a perception that they&#39;re not catching on fast enough or that maybe their initial success was all a sham. But the world today is different from the world yesterday; today demands new skills and if we don&#39;t develop them, someone else will come along that has those skills and we will be out of a job.  Instead, a champion looks for opportunities to grow their skills and learn something new, to risk temporarily looking foolish to come out with more skills.  A champion must improve every day:  every day we must be better than the last.  </p>
+        <span class="k">public</span> <span class="nf">HttpContextCorrelationProvider</span><span class="p">(</span><span class="n">Func</span><span class="p">&lt;</span><span class="n">HttpContextBase</span><span class="p">&gt;</span> <span class="n">httpContext</span><span class="p">,</span> <span class="kt">string</span> <span class="n">correlationKey</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">httpContext</span> <span class="p">==</span> <span class="k">null</span><span class="p">)</span>
+                <span class="k">throw</span> <span class="k">new</span> <span class="nf">ArgumentNullException</span><span class="p">(</span><span class="s">&quot;httpContext&quot;</span><span class="p">);</span>
 
-<p>Finally, a common attitude I see is that one&#39;s work environment is inflicted or imposed upon you by &quot;management&quot; instead of something to be shaped. A common attitude I hear is &quot;Well management will never let us write more unit tests&quot; or &quot;I understand what you&#39;re saying about code reviews, but management won&#39;t let us take the time.&quot;  But if pressed, usually &quot;management&quot; has not communicated any such thing, but rather people are either afraid to push for change or afraid to take a stand.  Yes, sometimes management will decide things that are contrary to what we, on the ground, might want or think best.  But that does not remove the obligation to identify practices and approaches that would represent meaningful value and to push for their adoption.  You miss 100% of the shots you don&#39;t take and an idea you don&#39;t propose will not be adopted.  It takes courage to speak up, to introduce an idea, to offer it up for criticism by peers.  But a champion rises above that.    </p>
+            <span class="k">this</span><span class="p">.</span><span class="n">httpContext</span> <span class="p">=</span> <span class="n">httpContext</span><span class="p">;</span>          
+            <span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span> <span class="p">=</span> <span class="n">correlationKey</span><span class="p">;</span>
+        <span class="p">}</span>
 
-<h3>I&#39;m ready to be a champion.  What will that mean for this blog?</h3>
+        <span class="k">public</span> <span class="kt">string</span> <span class="nf">GetCorrelationIdentifier</span><span class="p">()</span>
+        <span class="p">{</span>
+            <span class="k">try</span>
+            <span class="p">{</span>
+                <span class="kt">var</span> <span class="n">correlationId</span> <span class="p">=</span> <span class="n">GetCorrelationId</span><span class="p">();</span>
+                <span class="n">UpdateCookie</span><span class="p">(</span><span class="n">correlationId</span><span class="p">);</span>
+                <span class="n">UpdateContext</span><span class="p">(</span><span class="n">correlationId</span><span class="p">);</span>
+                <span class="k">return</span> <span class="n">correlationId</span><span class="p">;</span>
+            <span class="p">}</span>
+            <span class="k">catch</span> <span class="p">(</span><span class="n">Exception</span> <span class="n">ex</span><span class="p">)</span>
+            <span class="p">{</span>
+                <span class="k">return</span> <span class="s">&quot;123456&quot;</span><span class="p">;</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
 
-<p>In years I&#39;ve spent training in-house developers, acquiring skill in a new language or pattern is about one thing: changing one&#39;s mindset.  The best example I can offer is SQL.  There is a lot of really awful SQL out there (where &quot;awful&quot; means either &quot;ugly&quot; or &quot;not performant&quot;).  And why is that?  SQL isn&#39;t a particularly difficult language to learn syntactically.  It&#39;s pretty easy to put together simple queries and get some results.  Usually you can do a lot more useful stuff in it faster than you can in a language like C#.  But why is so much of it awful?  Well typically, developers learn SQL after they already know one or more imperative or object-oriented languages.  But SQL is neither of those:  it is declarative.  The SQL query engine exists to parse your query and convert it into physical operations.  Too many developers write SQL as if they&#39;re (subconsciously) trying to piece the results together the way they would manually.  But learning to write efficient, beautiful SQL is about one thing:  changing one&#39;s mindset to the language of sets.  Instead of instructing the query engine how to gather the results, SQL should be written to simply describe what should be true about elements in the result set; let the query engine figure out how to put it together (that&#39;s why it&#39;s paid the big bucks, after all).  </p>
+        <span class="k">private</span> <span class="kt">string</span> <span class="nf">GetCorrelationId</span><span class="p">()</span>
+        <span class="p">{</span>
+            <span class="kt">var</span> <span class="n">correlationCookie</span> <span class="p">=</span> <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Request</span><span class="p">.</span><span class="n">Cookies</span><span class="p">[</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">];</span>
 
-<p>Learning to be a champion also requires a shift in mindset:
-* We must be mindful of our day to day practices and improve them continuously
-* We must grow our skills as if our lives depended on it
-* We must solve problems, not just point them out
-* We must take a stand for things we believe in
-* We must raise up our teammates
-* We must make commitments, not promises</p>
+            <span class="kt">var</span> <span class="n">existsInContextItems</span> <span class="p">=</span> <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Items</span><span class="p">.</span><span class="n">Contains</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">);</span>
 
-<p>This blog will focus on fundamentals in system design and software development that often go uncovered or with too little depth and explore them more fully with code examples and suggested resources. </p>
+            <span class="k">if</span> <span class="p">(</span><span class="n">correlationCookie</span> <span class="p">==</span> <span class="k">null</span> <span class="p">&amp;&amp;</span> <span class="p">!</span><span class="n">existsInContextItems</span><span class="p">)</span>
+                 <span class="k">return</span> <span class="n">Guid</span><span class="p">.</span><span class="n">NewGuid</span><span class="p">().</span><span class="n">ToString</span><span class="p">();</span>
+
+            <span class="k">if</span> <span class="p">(</span><span class="n">correlationCookie</span> <span class="p">!=</span> <span class="k">null</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">correlationCookie</span><span class="p">.</span><span class="n">Value</span><span class="p">;</span>
+            <span class="k">else</span> 
+                <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Items</span><span class="p">[</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">]</span> <span class="k">as</span> <span class="kt">string</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">private</span> <span class="k">void</span> <span class="nf">UpdateCookie</span><span class="p">(</span><span class="kt">string</span> <span class="n">correlationId</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">CorrelationCookie</span> <span class="p">==</span> <span class="k">null</span><span class="p">)</span>
+            <span class="p">{</span>
+                <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Response</span><span class="p">.</span><span class="n">Cookies</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="k">new</span> <span class="n">HttpCookie</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">,</span> <span class="n">correlationId</span><span class="p">));</span>
+            <span class="p">}</span>
+            <span class="k">else</span> <span class="nf">if</span> <span class="p">(!</span><span class="n">CorrelationCookie</span><span class="p">.</span><span class="n">Value</span><span class="p">.</span><span class="n">Equals</span><span class="p">(</span><span class="n">correlationId</span><span class="p">,</span> <span class="n">StringComparison</span><span class="p">.</span><span class="n">OrdinalIgnoreCase</span><span class="p">))</span>
+            <span class="p">{</span>
+                <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Response</span><span class="p">.</span><span class="n">Cookies</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="k">new</span> <span class="n">HttpCookie</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">,</span> <span class="n">correlationId</span><span class="p">));</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+
+        <span class="k">private</span> <span class="k">void</span> <span class="nf">UpdateContext</span><span class="p">(</span><span class="kt">string</span> <span class="n">correlationId</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="kt">var</span> <span class="n">hasId</span> <span class="p">=</span> <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Items</span><span class="p">.</span><span class="n">Contains</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">);</span>
+
+            <span class="kt">var</span> <span class="n">currentValue</span> <span class="p">=</span> <span class="n">hasId</span> <span class="p">?</span> <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Items</span><span class="p">[</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">]</span> <span class="k">as</span> <span class="kt">string</span> <span class="p">:</span> <span class="k">null</span><span class="p">;</span>
+
+            <span class="k">if</span> <span class="p">(</span><span class="n">currentValue</span> <span class="p">==</span> <span class="k">null</span><span class="p">)</span>
+            <span class="p">{</span>
+                <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Items</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">,</span> <span class="n">correlationId</span><span class="p">);</span>
+            <span class="p">}</span>
+            <span class="k">else</span> <span class="nf">if</span> <span class="p">(!</span><span class="n">currentValue</span><span class="p">.</span><span class="n">Equals</span><span class="p">(</span><span class="n">correlationId</span><span class="p">,</span> <span class="n">StringComparison</span><span class="p">.</span><span class="n">OrdinalIgnoreCase</span><span class="p">))</span>
+            <span class="p">{</span>
+                <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Items</span><span class="p">[</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">]</span> <span class="p">=</span> <span class="n">correlationId</span><span class="p">;</span>
+            <span class="p">}</span>
+        <span class="p">}</span>     
+
+        <span class="k">public</span> <span class="n">HttpCookie</span> <span class="n">CorrelationCookie</span>
+        <span class="p">{</span>
+            <span class="k">get</span>
+            <span class="p">{</span>
+                <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Request</span><span class="p">.</span><span class="n">Cookies</span><span class="p">[</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">];</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+
+        <span class="k">private</span> <span class="n">HttpContextBase</span> <span class="n">context</span><span class="p">;</span>
+
+        <span class="k">private</span> <span class="n">HttpContextBase</span> <span class="n">Context</span>
+        <span class="p">{</span>
+            <span class="k">get</span>
+            <span class="p">{</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">context</span> <span class="p">==</span> <span class="k">null</span><span class="p">)</span>
+                    <span class="k">this</span><span class="p">.</span><span class="n">context</span> <span class="p">=</span> <span class="k">this</span><span class="p">.</span><span class="n">httpContext</span><span class="p">();</span>
+
+                <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="n">context</span><span class="p">;</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+</code></pre></div>
+<p>Finally we have our <code>CorrelatingLogInterceptor</code> that ties all these pieces together.  You&#39;ll see that the interceptor simply fetches the first argument (which is always the message for our <code>ILog</code> type), adds the correlation ID to it, updates the method argument, then calls the inner logger.  You&#39;ll notice that the interceptor does not currently guard that it has been applied to a correct invocation.  In other words, if you 
+configured this interceptor against a type that isn&#39;t ILog, the implementation will not notice or care (until an exception gets thrown).  We rely on Windsor to properly use our <code>IModelInterceptorsSelector</code> that contains the logic to apply the interceptor (not shown). </p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp"> <span class="k">public</span> <span class="k">class</span> <span class="nc">CorrelatingLogInterceptor</span> <span class="p">:</span> <span class="n">IInterceptor</span>
+    <span class="p">{</span>       
+        <span class="k">private</span> <span class="k">readonly</span> <span class="n">ICorrelationProvider</span> <span class="n">provider</span><span class="p">;</span>
+
+        <span class="k">public</span> <span class="nf">CorrelatingLogInterceptor</span><span class="p">(</span><span class="n">ICorrelationProvider</span> <span class="n">provider</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">provider</span> <span class="p">==</span> <span class="k">null</span><span class="p">)</span>
+                <span class="k">throw</span> <span class="k">new</span> <span class="nf">ArgumentNullException</span><span class="p">(</span><span class="s">&quot;provider&quot;</span><span class="p">);</span>
+
+            <span class="k">this</span><span class="p">.</span><span class="n">provider</span> <span class="p">=</span> <span class="n">provider</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="k">void</span> <span class="nf">Intercept</span><span class="p">(</span><span class="n">IInvocation</span> <span class="n">invocation</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">try</span>
+            <span class="p">{</span>
+                <span class="kt">var</span> <span class="n">message</span> <span class="p">=</span> <span class="n">GetMessageArgument</span><span class="p">(</span><span class="n">invocation</span><span class="p">);</span>
+                <span class="kt">var</span> <span class="n">correlationId</span> <span class="p">=</span> <span class="n">provider</span><span class="p">.</span><span class="n">GetCorrelationIdentifier</span><span class="p">();</span>
+                <span class="kt">var</span> <span class="n">newMessage</span> <span class="p">=</span> <span class="n">UpdateMessage</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">correlationId</span><span class="p">);</span>
+                <span class="n">UpdateArgument</span><span class="p">(</span><span class="n">invocation</span><span class="p">,</span> <span class="n">newMessage</span><span class="p">);</span>
+            <span class="p">}</span>
+            <span class="k">catch</span> <span class="p">(</span><span class="n">Exception</span> <span class="n">ex</span><span class="p">)</span>
+            <span class="p">{</span>
+            <span class="p">}</span>
+            <span class="k">finally</span>
+            <span class="p">{</span>
+                <span class="n">invocation</span><span class="p">.</span><span class="n">Proceed</span><span class="p">();</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+
+        <span class="k">private</span> <span class="kt">string</span> <span class="nf">GetMessageArgument</span><span class="p">(</span><span class="n">IInvocation</span> <span class="n">invocation</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">return</span> <span class="n">invocation</span><span class="p">.</span><span class="n">Arguments</span><span class="p">.</span><span class="n">First</span><span class="p">()</span> <span class="k">as</span> <span class="kt">string</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">private</span> <span class="kt">string</span> <span class="nf">UpdateMessage</span><span class="p">(</span><span class="kt">string</span> <span class="n">message</span><span class="p">,</span> <span class="kt">string</span> <span class="n">correlationId</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">return</span> <span class="kt">string</span><span class="p">.</span><span class="n">Format</span><span class="p">(</span><span class="s">&quot;{0}\n{1}: {2}&quot;</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="s">&quot;Correlation ID: &quot;</span><span class="p">,</span> <span class="n">correlationId</span><span class="p">);</span>
+        <span class="p">}</span>
+
+        <span class="k">private</span> <span class="k">void</span> <span class="nf">UpdateArgument</span><span class="p">(</span><span class="n">IInvocation</span> <span class="n">invocation</span><span class="p">,</span> <span class="kt">string</span> <span class="n">newMessage</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="n">invocation</span><span class="p">.</span><span class="n">SetArgumentValue</span><span class="p">(</span><span class="m">0</span><span class="p">,</span> <span class="n">newMessage</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+</code></pre></div>
+<p>This concludes the write-up on correlation event log entries across an MVC application using a Windsor interceptor and custom correlation provider on top of <code>HttpContext.Items</code>.  </p>
  	
 	</div>
       
-	<h2>Extending the MVC Default Model Binder</h2>
-	<div class="date">20 January 2015</div>	
+	<h2>Review of "Soft Skills" by John Sonmez</h2>
+	<div class="date">5 February 2015</div>	
 	<div class="post">
-	<p>In the <a href="/2014/12/14/writing-a-custom-mvc-model-validator.html">last post</a>, I talked about authoring custom MVC model validators that can be plugged into MVC&#39;s model validation pipeline.  In this post, I will go into some details on how we used a custom model binder to execute some logic after default model validation, but prior to MVC&#39;s model validation being executed.  </p>
+	<p>Like most developers, I consume a lot of books, articles, blog posts, and videos, but most of them are on languages or frameworks or various topics like that.  In &quot;Soft Skills&quot; by John Sonmez, he covers nothing like that, opting instead to focus on lesser known but arguably more important topics: how to manage one&#39;s professional career and in some ways, one&#39;s life, to find success.  I&#39;ll admit upfront that I admire John and the work he does.  I had big blogging plans for quite a while now, but it wasn&#39;t until I bought John&#39;s course that I worked up the discipline to do it.  For one, John is (or comes across as) an incredibly sincere guy.  I simply never get the sense that anything he says or does is for show or part of some elaborate act he&#39;s putting on.  Two, part of what is impressive about John is the volume of output he achieves each week: blog posts, videos, podcasts, Pluralsight courses, it&#39;s simply amazing.  But what puts John over the top is his view that one should release 90%+ of your content for free.</p>
 
-<p>In the login application we were writing, there were two cases when we wanted to update the model prior to validation (so that validation would apply), but I didn&#39;t want to write a separate per-type model binder.  In MVC, you can define the application-wide model binder in the application root by doing:</p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp"><span class="n">ModelBinders</span><span class="p">.</span><span class="n">Binders</span><span class="p">.</span><span class="n">DefaultBinder</span> <span class="p">=</span> <span class="k">new</span> <span class="n">MyCustomModelBinder</span><span class="p">();</span>
-</code></pre></div>
-<p>This binder will completely replace the default binder although generally it&#39;s easiest to inherit from the <code>DefaultModelBinder</code> and just extend the necessary method.  But figuring out exactly what to extend and what to reuse isn&#39;t necessarily obvious.  </p>
+<p>I joked with someone at work that John&#39;s book is the one I feel like I would write if I was as knowledgeable and successful as John.  I&#39;ve read a lot of the books he mentions and some of his advice comes from them (which is only natural), but they have his own unique take on them.  Interpersonal skills, career management, productivity, exercise, real estate, he runs the gamut throughout the 71 chapters.  Will every single one of them be meaningful to you?  No, of course not, at least not at the present time.  But a book like John&#39;s is really meant to be used as a reference or jumping off point.  The chapters are short and focused and they&#39;re all a very quick read.  </p>
 
-<p>In our case, there were a few things we needed to do:
-- We needed to pass values between web requests, but in some cases the values were sensitive so we encrypted them as hidden fields, but needed to decrypt them automatically during model binding
-- The vendor stack that actually provides the backing store will provide some user-specific data in the HTTP header on certain views and we wanted to automatically bind those</p>
+<p>What were some chapters that stood out to me?
+<ul>
+<li>Chapter 10 on being a professional is somewhat the topic of this blog and is a good treatment of the professional mindset vs the amateur mindset.  The champion mindset I refer to is an extension of being a professional.</li> 
+<li>Chapter 17 on resumes I cannot second strongly enough.   I got laid off a few years back and despite having little money, I spent about $300 to a resume writer and in my opinion, it was money well spent.  For one, the format of the resume was far superior to mine.  But mor than that, seeing what a professional can do to turn the average &quot;job description&quot; resume into one with &quot;accomplishments&quot; makes a real difference.  And now that I review resumes, I notice I treat ones that mention accomplishments a lot more seriously than 6+ page dumps of technology terms.</li>
+<li>Chapter 26 is titled &quot;Don&#39;t be afraid to look like an idiot.&quot;  John has it under the &quot;Marketing yourself&quot; section but frankly this chapter could go anywhere.  Everyone likes the feeling that comes from being an expert in something and having your opinion sought out, but a lot of situations don&#39;t call for an expert (or one who thinks they are), but simply a person brave enough to look like an idiot and ask questions.  One corollary to this I try to keep in mind is to give yourself permission to not be perfect (or even any good), particularly at the beginning.  No one gets better without practice.</li>
+<li>Chapter 50 on negotiating salary had some great advice, especially phrases and questions that could be used.  The tricky thing with salary is I don&#39;t really think it&#39;s unreasonable to expect a company to ask about salary range because why waste anyone&#39;s time if the money isn&#39;t close?  But that also generally assumes that money is the primary driver of choosing a job and that simply isn&#39;t always the case.  I think John&#39;s suggestion on how to manage that conversation in particular is really excellent, I&#39;m definitely going to use it.</li></ul></p>
 
-<p>In both cases, it would be possible to extend one of the MVC components to do these jobs, but a couple things bothered me:
-- Each time we came up with additional model binding that needed to occur, we would have to implement a new model binder and figure out how to incorporate previously logic or violate Open-Closed and keep making changes to our binder.
-- We could write a HTTP Header Value Provider, but it was only needed a fraction of times for a couple specific fields and the property on the view model we would populate had a different name so would have to figure out some alias system
-- It is possible to write per-type model binders and that might have worked for the cases where we were populating header values into the view model (since there were really 3 use-case specific ones of these), but our decryption can theoretically apply to fields on any view model and I didn&#39;t want to have to define a per-type binder when the goal of encryption was to simply annotate properties and have it work. </p>
+<p>You&#39;ll notice I didn&#39;t list any particular chapters from sections 4, 6, and 7, but that&#39;s not because I don&#39;t think they&#39;re valuable.  For one, I&#39;ve heard much of the financial advice before (as have most people) so it didn&#39;t resonate with me on this reading, but that doesn&#39;t make it bad advice; other developers in other situations that haven&#39;t heard it may find it incredibly useful.  Similarly with fitness I lost over 80 pounds a year or two back, I greatly respect that John has done similar. These chapters didn&#39;t resonate with me because I&#39;ve spent a lot of time focusing on them, but if you&#39;re not exercising or treating your health seriously, I advise you to do so immediately.  And in productivity, I think every chapter in there is worth being aware of.  Personal productivity is not a matter of using someone else&#39;s recipe, but there&#39;s a lot of ideas and options in that section that hopefully everyone can take away some idea.  John puts out so much content it&#39;s hard to argue with those results so anyone wondering how they can do more should spend a lot of time pondering these ideas and reading the related resources. </p>
 
-<p>So it occurred to us that what we wanted to have happen was:
-- Use the <code>DefaultModelBinder</code> up to the point when it runs model validation
-- At this point, run components against the completely bound model that would update the model as they saw fit (again, similar to model binding, hence the timing)
-- Once all those components completed, have the <code>DefaultModelBinder</code> run its custom validation logic as it normally would. </p>
+<p>Who would I recommend read John&#39;s book?  It&#39;s worth a read for any professional developer, but I&#39;d put those likely to benefit most into two groups:
+<ul>
+<li>Brand new developers</li>
+<li>Experienced developers whose careers have plateaued</li>
+</ul></p>
 
-<p>This brings me to the first key in the process:  what method in the <code>DefaultModelBinder</code> needs to be overridden to give us access to a completely bound but not yet validated view model?  The answer:  OnModelUpdated.  The below snippet shows the implementation of the OnModelUpdated method on DefaultModelBinder pulled from the MVC source code on CodePlex.  This is the only method that uses the model validators by way of using the application-wide static ModelValidator instance to get the validators to iterate through.  </p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp"><span class="k">protected</span> <span class="k">virtual</span> <span class="k">void</span> <span class="nf">OnModelUpdated</span><span class="p">(</span><span class="n">ControllerContext</span> <span class="n">controllerContext</span><span class="p">,</span> <span class="n">ModelBindingContext</span> <span class="n">bindingContext</span><span class="p">)</span>
-        <span class="p">{</span>
-            <span class="n">Dictionary</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">,</span> <span class="kt">bool</span><span class="p">&gt;</span> <span class="n">startedValid</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Dictionary</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">,</span> <span class="kt">bool</span><span class="p">&gt;(</span><span class="n">StringComparer</span><span class="p">.</span><span class="n">OrdinalIgnoreCase</span><span class="p">);</span>
+<p>When someone enters the workforce for the first time, they usually have a fair amount of academic training, but almost nothing on how to manage one&#39;s career, how to be productive, and all the myriad things that go into being a professional.  To them, I think John&#39;s book establishes a lot of basics that one should know to get your career started properly. </p>
 
-            <span class="k">foreach</span> <span class="p">(</span><span class="n">ModelValidationResult</span> <span class="n">validationResult</span> <span class="k">in</span> <span class="n">ModelValidator</span><span class="p">.</span><span class="n">GetModelValidator</span><span class="p">(</span><span class="n">bindingContext</span><span class="p">.</span><span class="n">ModelMetadata</span><span class="p">,</span> <span class="n">controllerContext</span><span class="p">).</span><span class="n">Validate</span><span class="p">(</span><span class="k">null</span><span class="p">))</span>
-            <span class="p">{</span>
-                <span class="kt">string</span> <span class="n">subPropertyName</span> <span class="p">=</span> <span class="n">CreateSubPropertyName</span><span class="p">(</span><span class="n">bindingContext</span><span class="p">.</span><span class="n">ModelName</span><span class="p">,</span> <span class="n">validationResult</span><span class="p">.</span><span class="n">MemberName</span><span class="p">);</span>
+<p>After some number of years, a lot of developers hit a lull in their careers.  Typically, such developers have worked hard and produced solid results, but there comes a point when the trajectory flattens out and the questioning begins:  should I move into management?  Should I learn X language?  I&#39;d like to work with technology A, but I never get selected for those projects - why not? Maybe company Y is hiring and will pay me more, but will I like it over there?  And the hard thing is, most of the time managers can&#39;t or won&#39;t identify why the plateau has happened or what needs to occur to pull you out of it, sometimes because they&#39;re afraid to give the necessary feedback and sometimes because they don&#39;t know themselves.  But it&#39;s at this point you need to take a hard look at yourself, get feedback from people you trust, and break through the ceiling.  That might mean marketing yourself outside the firm so your company appreciates your value.  It might mean changing company&#39;s or going freelance or getting new skills or simply taking one&#39;s productivity from solid to exceptional.  But whatever it is, John has it covered with some sound advice.  </p>
 
-                <span class="k">if</span> <span class="p">(!</span><span class="n">startedValid</span><span class="p">.</span><span class="n">ContainsKey</span><span class="p">(</span><span class="n">subPropertyName</span><span class="p">))</span>
-                <span class="p">{</span>
-                    <span class="n">startedValid</span><span class="p">[</span><span class="n">subPropertyName</span><span class="p">]</span> <span class="p">=</span> <span class="n">bindingContext</span><span class="p">.</span><span class="n">ModelState</span><span class="p">.</span><span class="n">IsValidField</span><span class="p">(</span><span class="n">subPropertyName</span><span class="p">);</span>
-                <span class="p">}</span>
-
-                <span class="k">if</span> <span class="p">(</span><span class="n">startedValid</span><span class="p">[</span><span class="n">subPropertyName</span><span class="p">])</span>
-                <span class="p">{</span>
-                    <span class="n">bindingContext</span><span class="p">.</span><span class="n">ModelState</span><span class="p">.</span><span class="n">AddModelError</span><span class="p">(</span><span class="n">subPropertyName</span><span class="p">,</span> <span class="n">validationResult</span><span class="p">.</span><span class="n">Message</span><span class="p">);</span>
-                <span class="p">}</span>
-            <span class="p">}</span>
-        <span class="p">}</span>
-</code></pre></div>
-<p>So at this point, we know one thing we need to do: implement our own model binder that inherits from <code>DefaultModelBinder</code>, overrides OnModelUpdated to hook in our custom logic, and ultimately call base.OnModelUpdated to run the default validation.  But before we implement that, we need to think about what our new update components will look like. </p>
-
-<p>Conceptually, we&#39;re going to pass the model from the model binder (and the model can be of any type) to a component and that component is going to potentially modify properties on it directly based on its rules.  So let&#39;s define an interface <code>IModelUpdate</code> which does that, with the addition of ControllerContext:</p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="k">public</span> <span class="k">interface</span> <span class="n">IModelUpdate</span>
-    <span class="p">{</span>
-        <span class="k">void</span> <span class="nf">Update</span><span class="p">(</span><span class="kt">object</span> <span class="n">model</span><span class="p">,</span> <span class="n">ControllerContext</span> <span class="n">controllerContext</span><span class="p">);</span>
-    <span class="p">}</span>
-</code></pre></div>
-<p>As mentioned, the model updates we&#39;d like to apply are:
-- Decrypt specific properties based on annotations
-- Bind values from the HTTP request</p>
-
-<p>These become several implementations of <code>IModelUpdate</code> that are then plugged into our custom model binder, which looks like:</p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp"><span class="k">public</span> <span class="k">class</span> <span class="nc">PreValidationModelUpdatingModelBinder</span> <span class="p">:</span> <span class="n">DefaultModelBinder</span>
-    <span class="p">{</span>
-        <span class="k">private</span> <span class="k">readonly</span> <span class="n">IList</span><span class="p">&lt;</span><span class="n">IModelUpdate</span><span class="p">&gt;</span> <span class="n">modelUpdates</span><span class="p">;</span>
-
-        <span class="k">public</span> <span class="nf">PreValidationModelUpdatingModelBinder</span><span class="p">(</span><span class="k">params</span> <span class="n">IModelUpdate</span><span class="p">[]</span> <span class="n">modelUpdates</span><span class="p">)</span>
-        <span class="p">{</span>
-            <span class="k">if</span> <span class="p">(</span><span class="n">modelUpdates</span> <span class="p">==</span> <span class="k">null</span><span class="p">)</span>
-                <span class="k">this</span><span class="p">.</span><span class="n">modelUpdates</span> <span class="p">=</span> <span class="k">new</span> <span class="n">List</span><span class="p">&lt;</span><span class="n">IModelUpdate</span><span class="p">&gt;();</span>
-            <span class="k">else</span>
-                <span class="k">this</span><span class="p">.</span><span class="n">modelUpdates</span> <span class="p">=</span> <span class="n">modelUpdates</span><span class="p">.</span><span class="n">ToList</span><span class="p">();</span>
-        <span class="p">}</span>      
-
-        <span class="k">protected</span> <span class="k">override</span> <span class="k">void</span> <span class="nf">OnModelUpdated</span><span class="p">(</span><span class="n">ControllerContext</span> <span class="n">controllerContext</span><span class="p">,</span> <span class="n">ModelBindingContext</span> <span class="n">bindingContext</span><span class="p">)</span>
-        <span class="p">{</span>
-            <span class="k">this</span><span class="p">.</span><span class="n">modelUpdates</span><span class="p">.</span><span class="n">ToList</span><span class="p">().</span><span class="n">ForEach</span><span class="p">(</span><span class="n">a</span> <span class="p">=&gt;</span> <span class="n">a</span><span class="p">.</span><span class="n">Update</span><span class="p">(</span><span class="n">bindingContext</span><span class="p">.</span><span class="n">Model</span><span class="p">,</span> <span class="n">controllerContext</span><span class="p">));</span>           
-
-            <span class="k">base</span><span class="p">.</span><span class="n">OnModelUpdated</span><span class="p">(</span><span class="n">controllerContext</span><span class="p">,</span> <span class="n">bindingContext</span><span class="p">);</span>            
-        <span class="p">}</span>       
-    <span class="p">}</span>    
-</code></pre></div>
-<p>As you can see, our model binder simply takes a collection of IModelUpdate components, overrides OnModelUpdated, calls each component, and then calls base.OnModelUpdated to have the default model binder run the model validations.  Each model updater is responsible for determining
-if it actually cares to perform an update on the model; if not, it simply does nothing to it.  I&#39;ve omitted the implementations of the <code>IModelUpdate</code> components as they&#39;re pretty application specific, but they are in my <a href="https://gist.github.com/dlongest/387d2ce35fb6f45688b8">Github</a> if you&#39;d like to see them.  </p>
-
-<p>This concludes a look at how we extended MVC to leverage its existing binding and validation functionality while letting us extend it in some pretty unique ways. </p>
+<p>John wrote a blog post last week that basically talked about how he was unable to write a blog post since everything he&#39;d ever wanted to say is now in a book.  I definitely see how that can be true, but I expect that to not last long (not that it was even really true for that post) before John will be back out there, producing more great content for the community and helping people drive themselves forward.  </p>
  	
 	</div>
   

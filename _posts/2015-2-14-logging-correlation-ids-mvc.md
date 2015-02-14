@@ -35,7 +35,7 @@ This interface is actually just a wrapper around an in-house logging library we 
 
 That yields this basic implementation that we inject throughout the application to components that are logging-aware:
 
-````chsarp
+````csharp
 
 public class EventIdEnclosingLogger : ILog
     {
