@@ -1,18 +1,20 @@
-<nav id="pagination">
-<ul>	
-    {% if paginator.previous_page %}
-	<li>
-      {% if paginator.previous_page == 1 %}
-      <a href="/" title="Previous Page">&laquo; Previous</a>
+<ul class="pager">
+ {% if paginator.previous_page %} 
+  <li>
+    {% if paginator.previous_page == 1 %}
+      <a  href="/" title="Older">&laquo; Newer</a>
       {% else %}
-      <a href="/page{{ paginator.previous_page }}/" title="Previous Page">&laquo; Previous</a>
+      <a href="/page{{ paginator.previous_page }}/" title="Older">&laquo; Newer</a>
       {% endif %}
 	  </li>
     {% endif %}	
-    {% if paginator.next_page %} 
-	<li>
-    <a href="/page{{ paginator.next_page }}/" title="Next Page">Next &raquo;</a>
+	 {% if paginator.next_page %} 
+	 <li>
+    <a  href="/page{{ paginator.next_page }}/" title="Older">Older &raquo;</a>
 	</li>
     {% endif %} 
-</ul>
-  </nav>
+</ul>		
+   
+
+
+  
