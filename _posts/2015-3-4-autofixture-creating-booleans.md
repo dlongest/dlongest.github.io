@@ -95,6 +95,12 @@ The final test below won't be a surprise, but boolean properties on the same obj
 
 ````csharp
 
+	 public class Booleans
+    {
+        public bool First { get; set; }
+        public bool Second { get; set; }
+    }
+
     [Fact]
     public void Fixture_AlternatesBetweenTrueAndFalse_ForBooleanProperties_OnSameInstance()
     {
