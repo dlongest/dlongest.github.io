@@ -1,7 +1,7 @@
 layout: post
 title: Birdseed Plans and the Urge to Overcomplicate
 tags: general
-description: Don't overcomplicate plans or designs. 
+description: Avoid overcomplicated plans or designs.
 ---
 One of my favorite TV shows is <em>Archer</em>, which is about a fictional spy agency and its hilariously (and generally incompetent) employees.  In the current season, the agency is basically attached to the CIA and its handler, Slater, who concocts very plans that he expects Archer and crew to pull off, but most of them go awry because a) that's kind of the point of the show; and b) the plans are very overwrought and complicated.  
 
