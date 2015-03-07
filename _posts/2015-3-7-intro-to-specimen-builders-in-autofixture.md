@@ -103,21 +103,19 @@ Now you have a specimen builder capable of constructing a given type for you and
 ```csharp
 	public class Contact
 	{
-		private readonly string personId;
-		private readonly int level;
-		private readonly string firstName;
-		private readonly string lastName;
-	
 		public Contact(string personId, string firstName, string lastName, int level)
 		{
 			/// elided
 		}
 		
-		/// normal get; private set; property declarations	
+		public string PersonId { get; private set; }
+		public int Level { get; private set; }
+		public string FirstName { get; private set; }
+		public string LastName { get; private set; }
 	}
 ```
 
-So here our contact is a PersonId (using the same numeric string rules as before), a level (an integer from 1 to 3), and first name and last name.  Let's assume that names are not particularly interesting, but there are valid reasons to use different levels in your testing, but again, they must be constrained within a specified range.  
+So here our contact has a PersonId (using the same numeric string rules as before), a level (an integer from 1 to 3), and first name and last name.  Let's assume that names are not particularly interesting, but there are valid reasons to use different levels in your testing, but again, they must be constrained within a specified range.  
 
 We can let AutoFixture just provide us with random strings for the names, but we cannot simply ask it for an integer for level as we must constrain it to a certain range.  How can we support that?  Of course one way is to extend our `ContactGenerator` class to now include rules for constraining levels.  That might look like:
 
@@ -163,4 +161,4 @@ That changes our `Contact` constructor to:
 	public Contact(PersonId personId, string firstName, string lastName, ContactLevel level)
 ```
 
-Now asking AutoFixture to resolve `Contact` will cause it to resolve `PersonId`' and `ContactLevel`.  But aren't we back where we started?  Again, `PersonId` must take a numeric string and `ContactLevel` must take an integer between 1 and 3.  Should we extend `ContactGenerator` to include that logic?  In my opinion, definitely not.  `ContactGenerator` doesn't have any special rules around the `PersonId` and `ContactLevel` it can take, it just requires that it receive instances of each so imbuing it with the rules for creating a Contact don't really make sense.  
+Now asking AutoFixture to resolve `Contact` will cause it to resolve `PersonId`' and `ContactLevel`.  But aren't we back where we started?  Again, `PersonId` must take a numeric string and `ContactLevel` must take an integer between 1 and 3.  Should we extend `ContactGenerator` to include that logic?  In my opinion, definitely not.  `ContactGenerator` doesn't have any special rules around the `PersonId` and `ContactLevel` it can take, it just requires that it receive instances of each so imbuing it with the rules for creating a Contact don't really make sense.   Of course we can create additional specimen builders for `ContactLevel` and `PersonId` and put the rules for each in those and that will work fine, but there is another main type of specimen builder that we need to discuss and that will be the subject of a future post. 
