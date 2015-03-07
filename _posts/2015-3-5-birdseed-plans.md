@@ -1,3 +1,4 @@
+---
 layout: post
 title: Birdseed Plans and the Urge to Overcomplicate
 tags: general
