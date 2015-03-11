@@ -3,6 +3,25 @@
  font: 1.25em/1.75em 'Droid Serif', serif;  
 }
 
+table.sql 
+{
+	font: 1em 'Courier', serif;	
+	width: 750px;
+	margin-bottom: 25px;
+	margin-top: 25px;
+}
+
+table.sql td
+{
+	font: 0.75em 'Courier', serif;	
+}
+
+table.sql th
+{
+	font: 0.75em 'Courier', serif;
+	font-weight: 700;
+}
+
 #aside
 {
 float: right;

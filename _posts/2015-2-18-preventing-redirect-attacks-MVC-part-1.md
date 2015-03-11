@@ -9,7 +9,7 @@ At work today some of us went through a "secure code training" as part of our PC
 <h2>What is an unvalidated forward or redirect attack?</h2>
 Suppose you have a web page that performs some function and you take, as a querystring parameter, a URL that you will return the user to once the processing is completed.  Suppose that looks like something like:
 
-````dosini
+````ini
 
 http://www.mysite.com/dosomething?Source=http://go.backhere.com
 
@@ -17,7 +17,7 @@ http://www.mysite.com/dosomething?Source=http://go.backhere.com
 
 So in the above, after our page completes its work, it will send the user back to http://go.backhere.com.  Sound okay?  Well suppose the link I visit is:
 
-````dosini
+````ini
 
 http://www.mysite.com/dosomething?Source=http://evil.site.com
 
@@ -111,12 +111,6 @@ So given an instance of HttpContextBase, we will return a URL from it.  Okay, si
                 return Uri.IsWellFormedUriString(Uri.UnescapeDataString(possibleTarget.Replace(this.prefix, string.Empty)), UriKind.Absolute);
             }
 
-            /// <summary>
-            /// This method returns an AbsoluteUri which is $SM$ decoded (if it was encoded) per rules at:
-            /// http://www.ca.com/us/support/ca-support-online/product-content/knowledgebase-articles/tec555131.aspx
-            /// </summary>
-            /// <param name="possibleTarget"></param>
-            /// <returns>string</returns>
             public string AsAbsoluteUri(string possibleTarget)
             {
                 if (!IsWellFormedAbsoluteUri(possibleTarget))
@@ -126,13 +120,7 @@ So given an instance of HttpContextBase, we will return a URL from it.  Okay, si
 
                 return new Uri(absoluteUri, UriKind.Absolute).AbsoluteUri;
             }
-
-            /// <summary>
-            /// This method decodes $SM$ encoded targets per CA's decode rules found at:
-            /// http://www.ca.com/us/support/ca-support-online/product-content/knowledgebase-articles/tec555131.aspx
-            /// </summary>
-            /// <param name="smEncodedTarget"></param>
-            /// <returns>string</returns>
+          
             private string Decode(string smEncodedTarget)
             {
                 var sb = new StringBuilder();
@@ -156,7 +144,6 @@ So given an instance of HttpContextBase, we will return a URL from it.  Okay, si
                     {
                         sb.Append(strippedPrefixUrl[i]);
                     }
-
                 }
 
                 return sb.ToString();

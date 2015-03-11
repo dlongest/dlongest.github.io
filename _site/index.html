@@ -50,272 +50,229 @@
 <div class="row">
  <div class="col-lg-12">		
           
-	<h2><a href="/2015/02/15/how-development-is-like-surgery.html">How Software Development is like Veterinary Medicine</a></h2>
-	<div class="date">15 February 2015</div>	
+	<h2><a href="/2015/03/10/cte-and-windowing-functions.html">Basics of Common Table Expressions and Windowing Functions</a></h2>
+	<div class="date">10 March 2015</div>	
 	<div class="post">
-	<p>My dad is a veterinarian at <a href="http://www.threechoptanimalclinic.com">Three Chopt Animal Clinic</a> in the Richmond area and has been for over 35 years.  When I was growing up, I observed quite a lot of veterinary procedures, far more than the average person would.  But I never really seriously considered going into the field, with the most common reason (usually given about me) is my general squeamishness related to blood.  I happen to love quotes and like most fields, the medical field is rife with them.  One of my dogs was unfortunately diagnosed this week with an incurable liver tumor so his time with us will be short.  When I was talking to my dad about the situation, he used a surgical axiom and it struck me how applicable it was to software development, particularly debugging and bug triage, which is consuming me as we try to wrap up the new identity platform integration.  In that spirit, this post will look at some common medical idioms and how they also apply to the seemingly unrelated field of software development.</p>
+	<p>Most developers are aware of how to use basic SQL constructs (Select, Update, Insert) even if their level of database programming is very minimal.  I was fortunate that before I was a fulltime developer, I worked in a role that required me to read, write, and troubleshoot an intense amount of SQL (and actually wasn&#39;t a DBA job).  Over the course of time, I became pretty fair at SQL and others used to bring me random SQL problems for help.  Most of these were straightforward enough problems, but occasionally I would get one that was really difficult, and I really enjoyed those.  Last night a current colleague of mine emailed me about a problem he was having doing some integration work and the solution was a set of SQL Server features that I think deserve to be talked about more:  common table expressions (CTE) and windowing functions.  There&#39;s a lot of power there and it can be overwhelming so the point of this post is to simply describe the problem and then illustrate how CTE and windowing functions made the solution pretty trivial.  </p>
 
-<h3>A chance to cut is a chance to cure</h3>
+<p>Here&#39;s the problem:  we have a table of data about employment applicants (i.e. people who have applied for jobs) in a legacy system.  We&#39;re moving to a new system so we need to take the data from the first system and transform it into a format required by the second system so it can be imported.  </p>
 
-<p>For surgeons, this axiom is exactly what it sounds like:  giving the surgeon a chance to perform the procedure is giving the patient a chance at a cure.  And similarly, given a problem, most software developers leap to a code solution.  When time is tight and shipping dates are on the line, I think most of us believe that relaxing code freeze and giving us a chance to do what we do best will save the day.  And sometimes that&#39;s true.  In my current project , at least half a dozen times and counting I&#39;ve had to pull out what seemed like a miracle to work around the vendor&#39;s design or a bug in the platform or just do something to help move us along.  And most of the time, I asked to be given the chance to write some code in contravention of code freeze or other similar process guidelines.  And that&#39;s worked out for us.  But sometimes the cure does not require surgery or more code.  And sometimes the situation cannot be salvaged.  And I would be remiss if I didn&#39;t add the flip side axiom:  a chance to cut is a chance to kill.  As developers, there is always the chance that we will introduce a bug so we have to weigh the risk of introducing a bug against the benefit of authoring code when a situation is outside the bounds of normal processes.</p>
+<p>First, here&#39;s the data in the legacy system in a single table (greatly stripped down for illustrative purposes, the real one has about 250+ columns):</p>
 
-<h3>All bleeding eventually stops</h3>
+<table class="sql">
+<tr><th>Name</th><th>Phone</th><th>EyeColor</th><th>PositionID</th><th>Title</th></tr>
+<tr><td>Franklin</td><td>1212</td><td>Blue</td><td>123</td><td>General Manager</td></tr>
+<tr><td>Franklin</td><td>1212</td><td>Blue</td><td>67</td><td>Salesman</td></tr>
+<tr><td>Pierce</td><td>1313</td><td>Blue</td><td>234</td><td>Digger</td></tr>
+<tr><td>Pierce</td><td>1313</td><td>Blue</td><td>456</td><td>Porter</td></tr>
+<tr><td>Hoolihan</td><td>1414</td><td>Green</td><td>123</td><td>General Manager</td></tr>
+<tr><td>Bob</td><td>1515</td><td>Blue</td><td>86</td><td>Maid</td></tr>
+<tr><td>Bob</td><td>1515</td><td>Blue</td><td>90</td><td>Electrician</td></tr>
+</table>
 
-<p>I&#39;m famous at work for saying this one in reference to struggling projects and I heard it from my dad who learned it from his boss when he started practicing veterinary medicine.  This phrase is a bit of gallows humor:  if a patient is bleeding, either a veterinarian will control the bleeding and save the patient or the patient will bleed out (at which point it will stop).  This phrase always reminds me that a tough situation will always come to an end.  Sometimes that means we&#39;ll salvage the situation, sometimes it will be ended with an unfortunate result.  But all we can do is focus on trying to save it while accepting that things might ultimately break against us.  </p>
+<p>We&#39;ll call Name, Phone, and EyeColor the &quot;key&quot; fields.  That&#39;s a bit of a misnomer since these keys don&#39;t uniquely identify a single record, but I&#39;m using the term simply to mean that those values are the same for a single person.  We need to sequentially number each record with the same key (and we&#39;ll call it PositionCount).  Franklin has two records so the first is 1 and the second is 2, but Hoolihan has only a single record so its sole record is 1.  We only want to print the key fields for the first position record; otherwise we want to print blanks for the key fields, but still print the position data.  Here&#39;s how we want the data to look for loading into the target system.  </p>
 
-<h3>If it's worth taking out, it's worth turning in</h3>
+<table class="sql">
+<tr><th>Name</th><th>Phone</th><th>EyeColor</th><th>PositionID</th><th>Title</th><th>PositionCount</th></tr>
+<tr><td>Franklin</td><td>1212</td><td>Blue</td><td>123</td><td>General Manager</td><td>1</td></tr>
+<tr><td></td><td></td><td></td><td>67</td><td>Salesman</td><td>2</td></tr>
+<tr><td>Pierce</td><td>1313</td><td>Blue</td><td>234</td><td>Digger</td><td>1</td></tr>
+<tr><td></td><td></td><td></td><td>456</td><td>Porter</td><td>2</td></tr>
+<tr><td>Hoolihan</td><td>1414</td><td>Green</td><td>123</td><td>General Manager</td><td>1</td></tr>
+<tr><td>Bob</td><td>1515</td><td>Blue</td><td>86</td><td>Maid</td><td>1</td></tr>
+<tr><td></td><td></td><td></td><td>90</td><td>Electrician</td><td>2</td></tr>
+</table>
 
-<p>In medicine this refers to the practice of turning into pathology any mass that is removed from a patient for follow-up analysis related to cause and effect.  In this day and age when unit testing is an almost universally accepted practice, I liken this saying to writing unit tests in response to bug reports.  The most common question I get from developers at work is either &quot;How can I start writing unit tests?&quot; or &quot;I&#39;m in a code-base, where should I start writing unit tests?&quot;  I usually ask &quot;Are there bugs you&#39;re fixing?&quot;  Bugs to me are the easiest way to start writing unit tests.  If you get a bug report, write a test that proves the bug exists.  Then all you&#39;ve got to do is write the code to make the test pass. That&#39;s it.  I&#39;m training a guy on my team as  .NET developer.  I got asked to look into a situation where data on-screen in an internal LOB application was being duplicated (but in the database it was fine).  This code was a few years old so it took quite a bit of effort to write a test to prove the bug in the code (a number of hours in fact).  But once I did that, I told my colleague &quot;All you&#39;ve got to do now is make the test pass.&quot;  I could have solved the problem in 5 minutes once I had the failing test, but I knew this would be a big win for him to make an actual production change in the code-base.  I typically look askance at someone who tells me they fixed a bug, but didn&#39;t check in any unit tests: how do they know it&#39;s solved?  How do they know they didn&#39;t introduce a new one?  So similar to submitting excised masses to pathology being a routine practice, developers should do likewise for bugs. </p>
+<p>The first part to tackle:  how can we determine the position counts?  Most people can instantly think of an imperative solution (just loop through the records, adding an incrementing value to that column, resetting for each person), but in SQL we want to think relationally.  A <code>Group By</code> would let us group the records by our keys, but at best we could obtain a count of the records in the group, not quite what we want.  It&#39;s here that a windowing function really shines.  </p>
 
-<h3>Age is not a disease</h3>
+<p>At the most basic level, a windowing function lets us define a partition (which is similar to a group) against which we can execute some statement.  Below is the SQL that will do the job for me:</p>
+<div class="highlight"><pre><code class="sql language-sql" data-lang="sql"><span class="k">select</span> <span class="o">*</span><span class="p">,</span> <span class="n">row_number</span><span class="p">()</span> <span class="n">over</span> <span class="p">(</span><span class="n">partition</span> <span class="k">by</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">order</span> <span class="k">by</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">asc</span><span class="p">)</span> <span class="k">as</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span> <span class="k">from</span> <span class="n">Persons</span><span class="p">)</span>
+</code></pre></div>
+<p>Probably not terribly hard to understand, but the <code>OVER</code> function is the windowing function.  We instruct it to partition our set based on <code>Name</code>, then order it by <code>Name</code> (which is required), then apply SQL Server&#39;s row_number() function within each partition.  This will have the effect we want: the first record in each partition will get the value 1, the next 2, and so on, but the counts reset for each partition.  By modifying the partition columns, you can control to what level the records are numbered.  See the documentation on the  <a href="https://msdn.microsoft.com/en-us/library/ms189461.aspx">OVER function on MSDN</a> to learn more.   The shown SQL is now capable of providing this result set:</p>
 
-<p>In medicine, just because a patient is of advanced age it does not automatically disqualify certain treatments.  Yes, age can and is a factor, but it&#39;s not the only one.  Similarly, just because a code-base has been around a long time, that does not mean it needs to be replaced with a newer one in a more contemporary technology.  At one company I worked, I supported all the systems for document collection.  Most of these were Windows services that read and loaded documents received on feeds we purchased, such as EDGAR documents from the SEC.  One of our most important ones was called PR Loader, which loaded press releases from a feed supplied by Acquire Media.  Press releases were of the utmost importance to us for two reasons.  One:  press releases by SEC regulation are where companies break news and it was worth big money to us (and our clients) to have access to them as fast as posssible.  And two:  we supplied investor relations solutions (i.e. a company&#39;s IR website) to some clients and it was a matter of regulation (and subject to fines) if press releases didn&#39;t reach their site at a specific time and these same PRs came to us on the Acquire feed (don&#39;t ask why they weren&#39;t uploaded directly).  And the PR Loader was written in a very old language that they told me was called X++ (which I&#39;d never heard of).  The loader was written over 10+ years previously and hadn&#39;t been changed in about 3 years when my team was doing a project that called for modifying it.  We batted around the idea of rewriting it in C#, but after analysis, the changes we needed to make could be added as a separate module without touching the core logic.  And since management did not feel comfortable taking the risk of rewriting it (or the time it would take plus the testing), it was faster to get a developer up to speed on the foreign language and have the one remaining developer (who at the time was a senior IT directory) do a thorough code review.  There is a lot of value inherent in legacy codebases.  The cost of producing them originally has been amortized over a long period and represents tremendous value to the enterprise: that should not be causally discarded just because of its age. </p>
+<table class="sql">
+<tr><th>Name</th><th>Phone</th><th>EyeColor</th><th>PositionID</th><th>Title</th><th>PositionCount</th></tr>
+<tr><td>Franklin</td><td>1212</td><td>Blue</td><td>123</td><td>General Manager</td><td>1</td></tr>
+<tr><td>Franklin</td><td>1212</td><td>Blue</td><td>67</td><td>Salesman</td><td>2</td></tr>
+<tr><td>Pierce</td><td>1313</td><td>Blue</td><td>234</td><td>Digger</td><td>1</td></tr>
+<tr><td>Pierce</td><td>1313</td><td>Blue</td><td>456</td><td>Porter</td><td>2</td></tr>
+<tr><td>Hoolihan</td><td>1414</td><td>Green</td><td>123</td><td>General Manager</td><td>1</td></tr>
+<tr><td>Bob</td><td>1515</td><td>Blue</td><td>86</td><td>Maid</td><td>1</td></tr>
+<tr><td>Bob</td><td>1515</td><td>Blue</td><td>90</td><td>Electrician</td><td>2</td></tr>
+</table>
 
-<h3>Never be first to use a new treatment, or last</h3>
+<p>From here, what we want to achieve is conceptually pretty easy:  we only want to print the value of the key fields when <code>PositionCount</code> is 1, otherwise we want to print a blank (or null).  We could of course make a new table (either temporary or real) and put our newly formed result set in that, then operate against it, but a common table expression (a CTE) is for me faster to develop (albeit with some caveats I&#39;ll cover at the end). </p>
 
-<p>Most developers do not work at companies whose goal is to be on the bleeding edge of technology.  The cost of being on the bleeding edge is you will do a lot of bleeding and for most enterprises, that is simply not necessary.  For most enterprises, if there is little documentation or knowledge out on the web on a topic, it should really give pause whether adopting a technology as part of a project is a sound business decision.  Perhaps it is, but often the lessons learned from it will be painful and expensive.  But on the other hand, being too late to pick up a new technology puts you far behind the competition.  If my company was still producing ASMX web services, it should really give us pause given the plethora of easier to use, widely accepted options out there.  The real moral of this lesson:  consider the full ramifications of adopting a technology and make sure you roll into its consideration the support and knowledge available out in the world about it. </p>
+<p>What is a common table expression (CTE)?  Without cribbing directly from Microsoft on the subject, it&#39;s in many ways an in-memory view.  You provide it with a name and you can thereafter use that name for the result set, same as you would a query.  The CTE can be used recursively in other queries and combined in some very powerful ways.  They are incredibly useful if you&#39;ll be referencing the same table or result set multiple times within a query as you can apply a name to that set and just use the name.  And due to how they&#39;re defined, they make queries a lot easier to read as they basically build from the top down in an organized fashion, which is genearlly far easier to decipher than a query with a lot of nested queries. </p>
 
-<h3>One CT scan is worth a thousand neurologists</h3>
+<p>A CTE is defined in either of the forms:</p>
+<div class="highlight"><pre><code class="sql language-sql" data-lang="sql"><span class="k">WITH</span> <span class="p">(</span><span class="n">CTE</span> <span class="n">Name</span><span class="o">&gt;</span> <span class="k">AS</span> <span class="p">(</span><span class="o">&lt;</span><span class="n">query</span> <span class="n">definition</span><span class="o">&gt;</span><span class="p">)</span> 
 
-<p>Speculation is free and easy.  And in many ways, fun.  But seldom does it gain us what we really need to solve a difficult situation:  data.  In the course of implementing the new cloud SaaS identity platform, its performance has at times not been what we expected or can accept.  And the vendor has given us a lot of stories about why it is the way it is or that it will be faster in production, or even that it&#39;s faster than we think.  And there were a lot of meetings to discuss everyone&#39;s opinions on the matter.  But I did something simple:  I got us data.  I added event logging on top of the client proxies that simply times all calls to the vendor&#39;s services and writes them (plus the method call name) into the event log.  From there it was easy to download the event logs and write an application to parse out the times and calculate standard descriptive statistics on them.  And they were eye-opening.  So much so that our IT management passed them to the vendor&#39;s management with a simple question:  how do you explain these numbers?  And they simply couldn&#39;t.  Thus began weeks of load testing and performance optimizations on their part with the data my login application could gather to show whether it was getting better or not.  So when there&#39;s argument and speculation, collect some data and at least argue about something rigorous.  </p>
+<span class="k">WITH</span> <span class="o">&lt;</span><span class="n">CTE</span> <span class="n">Name</span><span class="o">&gt;</span> <span class="p">(</span><span class="o">&lt;</span><span class="k">column</span> <span class="k">names</span><span class="o">&gt;</span><span class="p">)</span> <span class="k">AS</span> <span class="p">(</span><span class="o">&lt;</span><span class="n">query</span> <span class="n">definition</span><span class="o">&gt;</span><span class="p">)</span>
+</code></pre></div>
+<p>The first form defines a CTE with the given name and its columns will be all the columns from the query definition.  The second allows you to specify the column names you want available in the CTE; these are drawn from the query definition.  Only those columns defined in the CTE are then avaiable.  So what&#39;s the point of the CTE?  You can then use it like a table: </p>
+<div class="highlight"><pre><code class="sql language-sql" data-lang="sql"><span class="k">with</span> <span class="n">PositionsCounted</span> <span class="k">as</span> <span class="p">(</span><span class="k">select</span> <span class="o">*</span><span class="p">,</span> <span class="n">row_number</span><span class="p">()</span> <span class="n">over</span> <span class="p">(</span><span class="n">partition</span> <span class="k">by</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">order</span> <span class="k">by</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">asc</span><span class="p">)</span> <span class="k">as</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span> <span class="k">from</span> <span class="n">Persons</span><span class="p">)</span>
+<span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">PositionsCounted</span>
+</code></pre></div>
+<p>The above SQL is equivalent to just executing the query definition directly, all we&#39;ve really done at this point is given the result set a name we can operate against.  But for the final piece, we can do this to produce our final result set:</p>
+<div class="highlight"><pre><code class="sql language-sql" data-lang="sql"><span class="k">with</span> <span class="n">PositionsCounted</span> <span class="k">as</span> <span class="p">(</span><span class="k">select</span> <span class="o">*</span><span class="p">,</span> <span class="n">row_number</span><span class="p">()</span> <span class="n">over</span> <span class="p">(</span><span class="n">partition</span> <span class="k">by</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">order</span> <span class="k">by</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">asc</span><span class="p">)</span> <span class="k">as</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span> <span class="k">from</span> <span class="n">Persons</span><span class="p">)</span>
+<span class="k">select</span> <span class="k">case</span> <span class="k">when</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span><span class="o">&gt;</span><span class="mi">1</span> <span class="k">then</span> <span class="s1">&#39;&#39;</span> <span class="k">else</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">end</span><span class="p">,</span>
+       <span class="k">case</span> <span class="k">when</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span><span class="o">&gt;</span><span class="mi">1</span> <span class="k">then</span> <span class="s1">&#39;&#39;</span> <span class="k">else</span> <span class="p">[</span><span class="n">Phone</span><span class="p">]</span> <span class="k">end</span><span class="p">,</span>
+       <span class="k">case</span> <span class="k">when</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span><span class="o">&gt;</span><span class="mi">1</span> <span class="k">then</span> <span class="s1">&#39;&#39;</span> <span class="k">else</span> <span class="p">[</span><span class="n">EyeColor</span><span class="p">]</span> <span class="k">end</span><span class="p">,</span>
+       <span class="p">[</span><span class="n">PositionID</span><span class="p">],</span> <span class="p">[</span><span class="n">Title</span><span class="p">],</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span> 
+       <span class="k">from</span> <span class="n">PositionsCounted</span>
+</code></pre></div>
+<p>The trick to this SQL is that for each of our key fields, we inspect the value of <code>PositionCount</code> and that determines what we should output (either the value of the column or a blank).  Otherwise, we simply want the non-key fields returned as-is.  Obviously this approach is difficult to scale if there are hundreds of key fields (as each would have to be added manually as a case expression), but in this case when there&#39;s only a minimal number of key fields, it&#39;s trivial. </p>
 
-<p>There are plenty more medical sayings I could include here and maybe I&#39;ll take another run at this one day, but hopefully you&#39;ve enjoyed this only-slightly-joking comparison between the fields of medicine and software development.</p>
+<p>CTEs can be combined as well, such as the below, which simply puts the output of the first CTE into the second, a trivial but hopefully illustrative example:</p>
+<div class="highlight"><pre><code class="sql language-sql" data-lang="sql"><span class="k">with</span> <span class="n">PositionsCounted</span> <span class="k">as</span> <span class="p">(</span><span class="k">select</span> <span class="o">*</span><span class="p">,</span> <span class="n">row_number</span><span class="p">()</span> <span class="n">over</span> <span class="p">(</span><span class="n">partition</span> <span class="k">by</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">order</span> <span class="k">by</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">asc</span><span class="p">)</span> <span class="k">as</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span> <span class="k">from</span> <span class="n">Persons</span><span class="p">),</span>
+<span class="n">OutputReady</span> <span class="k">as</span> 
+<span class="p">(</span><span class="k">select</span> <span class="k">case</span> <span class="k">when</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span><span class="o">&gt;</span><span class="mi">1</span> <span class="k">then</span> <span class="s1">&#39;&#39;</span> <span class="k">else</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">end</span> <span class="p">[</span><span class="n">Name</span><span class="p">],</span>
+       <span class="k">case</span> <span class="k">when</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span><span class="o">&gt;</span><span class="mi">1</span> <span class="k">then</span> <span class="s1">&#39;&#39;</span> <span class="k">else</span> <span class="p">[</span><span class="n">Phone</span><span class="p">]</span> <span class="k">end</span> <span class="p">[</span><span class="n">Phone</span><span class="p">],</span>
+       <span class="k">case</span> <span class="k">when</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span><span class="o">&gt;</span><span class="mi">1</span> <span class="k">then</span> <span class="s1">&#39;&#39;</span> <span class="k">else</span> <span class="p">[</span><span class="n">EyeColor</span><span class="p">]</span> <span class="k">end</span> <span class="p">[</span><span class="n">EyeColor</span><span class="p">],</span>
+       <span class="p">[</span><span class="n">PositionID</span><span class="p">],</span> <span class="p">[</span><span class="n">Title</span><span class="p">],</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span> 
+       <span class="k">from</span> <span class="n">PositionsCounted</span><span class="p">)</span>
+<span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">OutputReady</span>
+</code></pre></div>
+<p>So we&#39;ve seen some benefits of CTE, what are the downsides?  First, they are only in scope for a single query.  If you want to reuse them, they have to be copied and pasted into all places that need to reference them.  If you have such a need, temp tables or something more permanent (or semi-permanent) is a better bet.  Second, because they do not exist in tempdb, you cannot add indexes or anything that would improve the performance (and constraints and stats are likewise not available).  Again, if that&#39;s your need, a temp table would be more in order.  </p>
+
+<p>I hope you&#39;ve enjoyed this basic look at common table expressions and windowing functions in SQL Server.  This has only scratched the surface of these features so I definitely suggest working through some examples to get a feel for how and when each can be applied in real life situations.  </p>
  	
 	</div>
 	<hr />
       
-	<h2><a href="/2015/02/14/logging-correlation-ids-mvc.html">Logging Correlation Identifiers in ASP.NET MVC</a></h2>
-	<div class="date">14 February 2015</div>	
+	<h2><a href="/2015/03/07/intro-to-specimen-builders-in-autofixture.html">Introduction to Custom Specimen Builders in AutoFixture</a></h2>
+	<div class="date">7 March 2015</div>	
 	<div class="post">
-	<p>Over the months we&#39;ve been writing a new login application against a cloud SaaS platform, we have slowly evolved our logging strategy for the application.  The evolution occurred because we needed more and more information for diagnostics and triage related to bugs (sometimes in our custom application, often in the vendor product too) and performance issues.  Some of the logging we employed that wrote into the event log on the login app server (of which there are 2) included:</p>
+	<p>It is no secret at work that I greatly admire Mark Seemann.  Anyone that comes to me and asks about software design I steer them right to his book &quot;Dependency Injection in .NET&quot;.  In some respects, the title does it a bit of a disservice as at least half of it discusses some critical component design practices that apply regardless of whether one wants to use dependency injection.  Don&#39;t get me wrong, he covers dependency injection quite comprehensively, but there&#39;s a lot more to DI than just picking a container.  Beyond his book, Mark is an incredibly accessible guy in a couple respects.  One, he blogs pretty regularly and has a lot of incredible posts on design, I find myself going back to them again and again.  And two, he is the author of AutoFixture, which needs almost no introduction in the .NET world.  And it is this library that is the subject of this post. </p>
+
+<p>When I explain AutoFixture to other developers, I start by emphasizing its most straightforward use: when writing unit tests, it will provide you with test data with almost no setup, as if by magic.  Whether you needs integers or strings or collections or even complex objects, AutoFixture will provide them to you in a semi-random fashion.  Within the AutoFixture codebase, the components that handle creation of some value are termed specimen builders and they inherit <code>ISpecimenBuilder</code>.  A few common examples:  </p>
 
 <ul>
-<li>Call times for the vendor services (SOAP and REST) as Windsor interceptors</li>
-<li>Communication exceptions trying to reach the vendor services as Windsor interceptors</li> 
-<li>Raw SOAP request and response messages as WCF behavior on the client proxy</li>
-<li>Primary error page with reference ID shown to user as controller-view</li>
+<li><code>Int32Generator</code> is the specimen builder that generates integers, beginning at 1 and incrementing by 1 for each subsequent integer that the fixture creates.<br></li>
+<li><code>StringGenerator</code> generates strings and the default randomization is to append a GUID to the name of the property or field</li>
+<li><code>RandomRangedNumberGenerator</code> generates a random number within a given range, but doesn&#39;t repeat numbers in that range until all values have been used (shameless plug: I submitted this to AutoFixture)</li>
 </ul>
 
-<p>These error messages have been incredibly useful.  The call times have driven a lot of performance testing and improvements that have been put in place (coupled with a separate application I wrote to crunch the call times, which I might present separately).  The raw SOAP request/responses have been useful because many bugs come down to the vendor asking what was returned by their system (presumption being we were handling it wrong), but the responses often showed a &quot;smoking gun&quot; that the response was missing key information.  </p>
+<p>And of course there are plenty more beyond that that do a variety of things.  Mark has an older but still valid post from 2010 on how to approach creating a custom specimen builder, but I think there&#39;s some nuances to it that aren&#39;t entirely clear to new users of AutoFixture.  I know when I introduced AutoFixture at work we used it in a sub-optimal manner because it wasn&#39;t always clear how to best customize it for certain situations and I want to save others some effort in the future since there isn&#39;t always time to dig into new libraries like one would hope.  This in no way takes away from how incredible AutoFixture is or how responsive Mark and others (Adam Chester and Nikos Baxevanis among them) are to questions about it on Stack Overflow or elsewhere, just my attempt to contribute some first-hand experience and perspective.</p>
 
-<p>Recently as we&#39;ve fought hard to move to deployment, I realized that there was a bit of an oversight in the logging:  while it wasn&#39;t too hard to trace backward through the log to identify a series of messages within a given use-case, it isn&#39;t the kind of thing anyone could do without a lot more knowledge of the platform calls (knowledge my team had gained over the last 9 months).  But there seemed conceptually a pretty simple solution to this problem:  all we needed was a way to correlate the log messages for a user within a single session.  I&#39;m not even interested in tracking the user across multiple different sessions (although if that happens, fine).  I principally just want a way that if creating an account requires transitioning through 3 or 4 screens and that causes 8-10 log messages (with everything turned up), we can tie those log messages together as a matter of rote.  </p>
-
-<p>Obviously lots of ways to do this but the below will present one way I&#39;ve gone about it.  First, we have in place this logging interface:</p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">  <span class="k">public</span> <span class="k">interface</span> <span class="n">ILog</span>
-    <span class="p">{</span>
-        <span class="k">void</span> <span class="nf">Log</span><span class="p">(</span><span class="kt">string</span> <span class="n">message</span><span class="p">);</span>
-        <span class="k">void</span> <span class="nf">Log</span><span class="p">(</span><span class="kt">string</span> <span class="n">message</span><span class="p">,</span> <span class="n">Exception</span> <span class="n">ex</span><span class="p">);</span>
-        <span class="k">void</span> <span class="nf">Log</span><span class="p">(</span><span class="kt">string</span> <span class="n">message</span><span class="p">,</span> <span class="kt">object</span> <span class="n">obj</span><span class="p">);</span>
-        <span class="k">void</span> <span class="nf">Log</span><span class="p">(</span><span class="kt">string</span> <span class="n">message</span><span class="p">,</span> <span class="n">Exception</span> <span class="n">ex</span><span class="p">,</span> <span class="kt">object</span> <span class="n">obj</span><span class="p">);</span>
+<p>The <code>ISpecimenBuilder</code> interface has the following signature (taken directly from the AutoFixture codebase):</p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="k">public</span> <span class="k">interface</span> <span class="n">ISpecimenBuilder</span>
+    <span class="p">{</span>        
+        <span class="kt">object</span> <span class="nf">Create</span><span class="p">(</span><span class="kt">object</span> <span class="n">request</span><span class="p">,</span> <span class="n">ISpecimenContext</span> <span class="n">context</span><span class="p">);</span>
     <span class="p">}</span>
 </code></pre></div>
-<p>This interface is actually just a wrapper around an in-house logging library we have; this one closes over that type (which requires basically an event ID be provided) so that components in the application can be agnostic to the event ID they&#39;re using, which is configured by Windsor in the root.</p>
+<p>Here, <code>request</code> is <em>something</em> that needs to be created (and I&#39;ll come back to that in a minute).  The <code>context</code> can be used if necessary to generate other values from the fixture, but is not always needed.  For example, <code>Int32Generator</code> has no need of the <code>context</code> as it contains all the knowledge for satisfying its creation goals.  But suppose you&#39;re creating a specimen builder for a complex type and in the course of that, you want AutoFixture to provide some value (of any type)?  In that case you can use the <code>context</code> to obtain it (I&#39;m intentionally omitting why you get <code>ISpecimenContext</code> and not <code>IFixture</code>).  </p>
 
-<p>That yields this basic implementation that we inject throughout the application to components that are logging-aware:</p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp"><span class="k">public</span> <span class="k">class</span> <span class="nc">EventIdEnclosingLogger</span> <span class="p">:</span> <span class="n">ILog</span>
-    <span class="p">{</span>
-        <span class="k">private</span> <span class="n">ILogger</span><span class="p">&lt;</span><span class="kt">object</span><span class="p">&gt;</span> <span class="n">logger</span><span class="p">;</span>
-        <span class="k">private</span> <span class="n">EventId</span> <span class="n">eventId</span><span class="p">;</span>
-
-        <span class="k">public</span> <span class="nf">EventIdEnclosingLogger</span><span class="p">(</span><span class="n">ILogger</span><span class="p">&lt;</span><span class="kt">object</span><span class="p">&gt;</span> <span class="n">logger</span><span class="p">,</span> <span class="n">EventId</span> <span class="n">eventId</span><span class="p">)</span>
-        <span class="p">{</span>
-            <span class="k">this</span><span class="p">.</span><span class="n">logger</span> <span class="p">=</span> <span class="n">logger</span><span class="p">;</span>
-            <span class="k">this</span><span class="p">.</span><span class="n">eventId</span> <span class="p">=</span> <span class="n">eventId</span><span class="p">;</span>
-        <span class="p">}</span>
-
-        <span class="k">public</span> <span class="k">virtual</span> <span class="k">void</span> <span class="nf">Log</span><span class="p">(</span><span class="kt">string</span> <span class="n">message</span><span class="p">)</span>
-        <span class="p">{</span>
-            <span class="k">this</span><span class="p">.</span><span class="n">logger</span><span class="p">.</span><span class="n">Log</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="k">this</span><span class="p">.</span><span class="n">eventId</span><span class="p">);</span>
-        <span class="p">}</span>
-
-        <span class="k">public</span> <span class="k">virtual</span> <span class="k">void</span> <span class="nf">Log</span><span class="p">(</span><span class="kt">string</span> <span class="n">message</span><span class="p">,</span> <span class="kt">object</span> <span class="n">obj</span><span class="p">)</span>
-        <span class="p">{</span>
-            <span class="k">this</span><span class="p">.</span><span class="n">logger</span><span class="p">.</span><span class="n">Log</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="k">this</span><span class="p">.</span><span class="n">eventId</span><span class="p">);</span>
-        <span class="p">}</span>
-
-        <span class="k">public</span> <span class="k">virtual</span> <span class="k">void</span> <span class="nf">Log</span><span class="p">(</span><span class="kt">string</span> <span class="n">message</span><span class="p">,</span> <span class="n">Exception</span> <span class="n">ex</span><span class="p">)</span>
-        <span class="p">{</span>
-            <span class="k">this</span><span class="p">.</span><span class="n">logger</span><span class="p">.</span><span class="n">Log</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">ex</span><span class="p">,</span> <span class="k">this</span><span class="p">.</span><span class="n">eventId</span><span class="p">);</span>
-        <span class="p">}</span>
-
-        <span class="k">public</span> <span class="k">virtual</span> <span class="k">void</span> <span class="nf">Log</span><span class="p">(</span><span class="kt">string</span> <span class="n">message</span><span class="p">,</span> <span class="n">Exception</span> <span class="n">ex</span><span class="p">,</span> <span class="kt">object</span> <span class="n">obj</span><span class="p">)</span>
-        <span class="p">{</span>
-            <span class="k">this</span><span class="p">.</span><span class="n">logger</span><span class="p">.</span><span class="n">Log</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">ex</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="k">this</span><span class="p">.</span><span class="n">eventId</span><span class="p">);</span>
-        <span class="p">}</span>       
-    <span class="p">}</span>
-</code></pre></div>
-<p>So given that I have a logging abstraction, what&#39;s an easy way I can introduce a a correlation ID into the mesages?  A decorator!  In case you&#39;re not aware, a decorator pattern allows the addition of functionality on top of an existing component.  So from the above types, I could define:</p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="k">public</span> <span class="n">CorrelatingLogger</span> <span class="p">:</span> <span class="n">ILog</span>
-    <span class="p">{</span>
-
-        <span class="k">private</span> <span class="k">readonly</span> <span class="n">ILog</span> <span class="n">logger</span><span class="p">;</span>
-
-        <span class="c1">//// elided</span>
-    <span class="p">}</span>
-</code></pre></div>
-<p>So an ILog implementation is injected into the CorrelatingLogger, which can then enrich the parameters before calling into the inner logger implementation.  Mulitple layers of decorators can be applied, with the innermost implmentation finally doing the job.  But given our use of Windsor and interceptors, an interceptor was again the natural choice here.  That doesn&#39;t really alter the philosophy being employed here at all, just leverages the Windsor infrastructure.  </p>
-
-<p>So this part probably makes sense, but I haven&#39;t answered the key question:  where am I getting the correlation IDs from and how will those be managed?  We could imbue the logging interceptor with the ability to manage the correlation IDs for us, but that feels like a single-responsibility violation: it should be responsible for computing appropriate log messages based on the correlation ID, not managing them.  Enter a new abstraction:  ICorrelationProvider.</p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="k">public</span> <span class="k">interface</span> <span class="n">ICorrelationProvider</span>
-    <span class="p">{</span>
-        <span class="kt">string</span> <span class="nf">GetCorrelationIdentifier</span><span class="p">();</span>
-    <span class="p">}</span>
-</code></pre></div>
-<p>Simple enough, how will we power it?  Okay, now for the real debate.  First, the application is not backed by a database or store of its own (all of that being offloaded to the vendor stack) so no help there.  The most natural mechanism to pass state around during a single request is <code>HttpContext.Items</code>, which is a dictionary only available to the currently executing request (i.e. thread local, so there&#39;s no interference between other executing requests).  So that will work fine as storage during the request, but how will we ensure continuity of IDs across requests?  Simple enough we can use our good friend the cookie.  It&#39;s arguable we could/should have used Session, and that&#39;s a legitimate argument, but like I said, this is just one way to do it.  </p>
-
-<p>We&#39;ve now identified that we will use a cookie to manage the correlation IDs between requests and we will essentially load it into <code>HttpContext.Items</code> at the first opportunity during a request.  I considered overriding the <code>Initialize</code> method in the controller and having that manage the state for me, but that spread out knowledge of the correlation ID key to two places:  the controller and the correlation provider.  After initially implementing it that way, I realized that piece of knowledge had to be in one place so I switched to the below implementation.</p>
-
-<p>A few notes for the code you&#39;ll see below:</p>
+<p>Request is ambiguously typed as <code>object</code> - what is it?  Typically, <code>request</code> is one of:</p>
 
 <ul>
-<li>We inject a lambda to provide us with the `HttpContextBase`, not the `HttpContext` itself since at the point when the provider is created, I have been burned by the context not being fully formed. Instead, we use the lambda as it's not until execution (when the context will be fully formed) that we actually need it.</li>
-<li>We prioritize the value in the cookie over the one in Items so if there's a discrepancy for any reason, we allow the cookie to dictate whether we create a new ID (a GUID) and load it into Items or not.</li>
-<li>If for some reason an exception is thrown while trying to create, obtain, or update the correlation ID, we will swallow it and return a hard-coded value.  This will let our system functionality continue unabated and make it obvious there's been an issue in the logging.  Hopefully though all such issues will be ironed out in development anyway, but we do not want the live functionality rendered unusuable simply because the log messages don't get this extra value.</li>
-<li>GetCorrelationId violates CQS:  it both mutates system state (by adding/updating a cookie and items) and returns a value.  I felt the violation in this case was acceptable as it made the client code easier to follow.</li>
+<li>A <code>Type</code></li>
+<li>A <code>PropertyInfo</code></li>
+<li>A <code>ParameterInfo</code></li>
 </ul>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="k">public</span> <span class="k">class</span> <span class="nc">HttpContextCorrelationProvider</span> <span class="p">:</span> <span class="n">ICorrelationProvider</span>
+
+<p>And that brings us finally to the point of this post:  why on earth is that and what does it mean for us trying to create a custom specimen builder?</p>
+
+<p>We&#39;ll start with the most obvious, Type.  At the most basic level, use of AutoFixture generally looks like:</p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="kt">var</span> <span class="n">fixture</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Fixture</span><span class="p">();</span>            
+    <span class="kt">var</span> <span class="n">contact</span> <span class="p">=</span> <span class="n">fixture</span><span class="p">.</span><span class="n">Create</span><span class="p">&lt;</span><span class="n">Contact</span><span class="p">&gt;();</span>
+</code></pre></div>
+<p>We create a Fixture, then we ask it for the type <code>Contact</code>, which is defined as:</p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">     <span class="k">public</span> <span class="k">class</span> <span class="nc">Contact</span>
     <span class="p">{</span>
-        <span class="k">private</span> <span class="k">readonly</span> <span class="n">Func</span><span class="p">&lt;</span><span class="n">HttpContextBase</span><span class="p">&gt;</span> <span class="n">httpContext</span><span class="p">;</span>
-        <span class="k">private</span> <span class="k">readonly</span> <span class="kt">string</span> <span class="n">correlationKey</span><span class="p">;</span>
-
-        <span class="k">public</span> <span class="nf">HttpContextCorrelationProvider</span><span class="p">(</span><span class="n">Func</span><span class="p">&lt;</span><span class="n">HttpContextBase</span><span class="p">&gt;</span> <span class="n">httpContext</span><span class="p">,</span> <span class="kt">string</span> <span class="n">correlationKey</span><span class="p">)</span>
+        <span class="k">public</span> <span class="nf">Contact</span><span class="p">(</span><span class="kt">string</span> <span class="n">personId</span><span class="p">)</span>
         <span class="p">{</span>
-            <span class="k">if</span> <span class="p">(</span><span class="n">httpContext</span> <span class="p">==</span> <span class="k">null</span><span class="p">)</span>
-                <span class="k">throw</span> <span class="k">new</span> <span class="nf">ArgumentNullException</span><span class="p">(</span><span class="s">&quot;httpContext&quot;</span><span class="p">);</span>
-
-            <span class="k">this</span><span class="p">.</span><span class="n">httpContext</span> <span class="p">=</span> <span class="n">httpContext</span><span class="p">;</span>          
-            <span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span> <span class="p">=</span> <span class="n">correlationKey</span><span class="p">;</span>
+            <span class="n">PersonId</span> <span class="p">=</span> <span class="n">personId</span><span class="p">;</span>
         <span class="p">}</span>
 
-        <span class="k">public</span> <span class="kt">string</span> <span class="nf">GetCorrelationIdentifier</span><span class="p">()</span>
+        <span class="k">public</span> <span class="kt">string</span> <span class="n">PersonId</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span>  <span class="p">}</span>
+    <span class="p">}</span>
+</code></pre></div>
+<p>AutoFixture now attempts to satisfy the request for a contact by running it through a variety of specimen builders in an implementation of the powerful chain of responsibility pattern.  The chain in this case is (among other things) a collection of specimen builders that individually assess whether they are capable of providing a value of type <code>Contact</code>.  The request to create it falls through each builder in the chain until one finally returns an actual <code>Contact</code> (each returns a <code>NoSpecimen</code> if it cannot handle the request).  But what does it mean to create a Contact?  </p>
+
+<p>As shown, AutoFixture will find that Contact has one constructor and that this constructor takes a string.  So AutoFixture will automatically attempt to resolve creation of a string, then use that to create the <code>Contact</code> via its constructor.  This would be true regardless of how many dependencies the constructor had or their type.  And if there are multiple constructors, AutoFixture selects among them (by default, taking the one with the fewest parameters).  So from that view, AutoFixture creating an instance of an arbitrary complex type is simply the creation of any dependencies of that type until the entire graph is constructed. </p>
+
+<p>Now let&#39;s say for the sake of argument that PersonId, despite being typed as a string, is actually numeric.  We&#39;ve already seen earlier that AutoFixture, by default, will make strings whose value are the property name and a GUID so we know that the default is not going to work for us here.  The first and easiest approach to this is:</p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="kt">var</span> <span class="n">fixture</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Fixture</span><span class="p">();</span>
+    <span class="n">fixture</span><span class="p">.</span><span class="n">Register</span><span class="p">(()</span> <span class="p">=&gt;</span> <span class="s">&quot;12345678&quot;</span><span class="p">);</span>
+    <span class="kt">var</span> <span class="n">contact</span> <span class="p">=</span> <span class="n">fixture</span><span class="p">.</span><span class="n">Create</span><span class="p">&lt;</span><span class="n">Contact</span><span class="p">&gt;();</span>
+</code></pre></div>
+<p>This solves one problem (PersonId on the Contact will be &quot;12345678&quot;) <em>except</em> this will cause AutoFixture to use &quot;12345678&quot; for every string it creates.  So we&#39;ve overreached a bit here.  Of course we could use some method that generates a random integer and uses that instead of a hard-coded one, but again, it will use that random numeric string everywhere.  At some point, it might occur to us &quot;What if we could customize the creation of Contact as a whole instead of at the string level?&quot;  Enter a custom specimen builder.  </p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="k">public</span> <span class="k">class</span> <span class="nc">ContactGenerator</span> <span class="p">:</span> <span class="n">ISpecimenBuilder</span>
+    <span class="p">{</span>
+        <span class="k">public</span> <span class="kt">object</span> <span class="nf">Create</span><span class="p">(</span><span class="kt">object</span> <span class="n">request</span><span class="p">,</span> <span class="n">ISpecimenContext</span> <span class="n">context</span><span class="p">)</span>
         <span class="p">{</span>
-            <span class="k">try</span>
-            <span class="p">{</span>
-                <span class="kt">var</span> <span class="n">correlationId</span> <span class="p">=</span> <span class="n">GetCorrelationId</span><span class="p">();</span>
-                <span class="n">UpdateCookie</span><span class="p">(</span><span class="n">correlationId</span><span class="p">);</span>
-                <span class="n">UpdateContext</span><span class="p">(</span><span class="n">correlationId</span><span class="p">);</span>
-                <span class="k">return</span> <span class="n">correlationId</span><span class="p">;</span>
-            <span class="p">}</span>
-            <span class="k">catch</span> <span class="p">(</span><span class="n">Exception</span> <span class="n">ex</span><span class="p">)</span>
-            <span class="p">{</span>
-                <span class="k">return</span> <span class="s">&quot;123456&quot;</span><span class="p">;</span>
-            <span class="p">}</span>
-        <span class="p">}</span>
+            <span class="kt">var</span> <span class="n">type</span> <span class="p">=</span> <span class="n">request</span> <span class="k">as</span> <span class="n">Type</span><span class="p">;</span>
 
-        <span class="k">private</span> <span class="kt">string</span> <span class="nf">GetCorrelationId</span><span class="p">()</span>
-        <span class="p">{</span>
-            <span class="kt">var</span> <span class="n">correlationCookie</span> <span class="p">=</span> <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Request</span><span class="p">.</span><span class="n">Cookies</span><span class="p">[</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">];</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">type</span> <span class="p">==</span> <span class="k">null</span><span class="p">)</span>
+                <span class="k">return</span> <span class="k">new</span> <span class="nf">NoSpecimen</span><span class="p">(</span><span class="n">request</span><span class="p">);</span>
 
-            <span class="kt">var</span> <span class="n">existsInContextItems</span> <span class="p">=</span> <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Items</span><span class="p">.</span><span class="n">Contains</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">);</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">type</span> <span class="p">!=</span> <span class="k">typeof</span><span class="p">(</span><span class="n">Contact</span><span class="p">))</span>
+                <span class="k">return</span> <span class="k">new</span> <span class="nf">NoSpecimen</span><span class="p">(</span><span class="n">request</span><span class="p">);</span>
 
-            <span class="k">if</span> <span class="p">(</span><span class="n">correlationCookie</span> <span class="p">==</span> <span class="k">null</span> <span class="p">&amp;&amp;</span> <span class="p">!</span><span class="n">existsInContextItems</span><span class="p">)</span>
-                 <span class="k">return</span> <span class="n">Guid</span><span class="p">.</span><span class="n">NewGuid</span><span class="p">().</span><span class="n">ToString</span><span class="p">();</span>
-
-            <span class="k">if</span> <span class="p">(</span><span class="n">correlationCookie</span> <span class="p">!=</span> <span class="k">null</span><span class="p">)</span>
-                <span class="k">return</span> <span class="n">correlationCookie</span><span class="p">.</span><span class="n">Value</span><span class="p">;</span>
-            <span class="k">else</span> 
-                <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Items</span><span class="p">[</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">]</span> <span class="k">as</span> <span class="kt">string</span><span class="p">;</span>
-        <span class="p">}</span>
-
-        <span class="k">private</span> <span class="k">void</span> <span class="nf">UpdateCookie</span><span class="p">(</span><span class="kt">string</span> <span class="n">correlationId</span><span class="p">)</span>
-        <span class="p">{</span>
-            <span class="k">if</span> <span class="p">(</span><span class="n">CorrelationCookie</span> <span class="p">==</span> <span class="k">null</span><span class="p">)</span>
-            <span class="p">{</span>
-                <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Response</span><span class="p">.</span><span class="n">Cookies</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="k">new</span> <span class="n">HttpCookie</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">,</span> <span class="n">correlationId</span><span class="p">));</span>
-            <span class="p">}</span>
-            <span class="k">else</span> <span class="nf">if</span> <span class="p">(!</span><span class="n">CorrelationCookie</span><span class="p">.</span><span class="n">Value</span><span class="p">.</span><span class="n">Equals</span><span class="p">(</span><span class="n">correlationId</span><span class="p">,</span> <span class="n">StringComparison</span><span class="p">.</span><span class="n">OrdinalIgnoreCase</span><span class="p">))</span>
-            <span class="p">{</span>
-                <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Response</span><span class="p">.</span><span class="n">Cookies</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="k">new</span> <span class="n">HttpCookie</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">,</span> <span class="n">correlationId</span><span class="p">));</span>
-            <span class="p">}</span>
-        <span class="p">}</span>
-
-        <span class="k">private</span> <span class="k">void</span> <span class="nf">UpdateContext</span><span class="p">(</span><span class="kt">string</span> <span class="n">correlationId</span><span class="p">)</span>
-        <span class="p">{</span>
-            <span class="kt">var</span> <span class="n">hasId</span> <span class="p">=</span> <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Items</span><span class="p">.</span><span class="n">Contains</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">);</span>
-
-            <span class="kt">var</span> <span class="n">currentValue</span> <span class="p">=</span> <span class="n">hasId</span> <span class="p">?</span> <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Items</span><span class="p">[</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">]</span> <span class="k">as</span> <span class="kt">string</span> <span class="p">:</span> <span class="k">null</span><span class="p">;</span>
-
-            <span class="k">if</span> <span class="p">(</span><span class="n">currentValue</span> <span class="p">==</span> <span class="k">null</span><span class="p">)</span>
-            <span class="p">{</span>
-                <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Items</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">,</span> <span class="n">correlationId</span><span class="p">);</span>
-            <span class="p">}</span>
-            <span class="k">else</span> <span class="nf">if</span> <span class="p">(!</span><span class="n">currentValue</span><span class="p">.</span><span class="n">Equals</span><span class="p">(</span><span class="n">correlationId</span><span class="p">,</span> <span class="n">StringComparison</span><span class="p">.</span><span class="n">OrdinalIgnoreCase</span><span class="p">))</span>
-            <span class="p">{</span>
-                <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Items</span><span class="p">[</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">]</span> <span class="p">=</span> <span class="n">correlationId</span><span class="p">;</span>
-            <span class="p">}</span>
-        <span class="p">}</span>     
-
-        <span class="k">public</span> <span class="n">HttpCookie</span> <span class="n">CorrelationCookie</span>
-        <span class="p">{</span>
-            <span class="k">get</span>
-            <span class="p">{</span>
-                <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="n">Context</span><span class="p">.</span><span class="n">Request</span><span class="p">.</span><span class="n">Cookies</span><span class="p">[</span><span class="k">this</span><span class="p">.</span><span class="n">correlationKey</span><span class="p">];</span>
-            <span class="p">}</span>
-        <span class="p">}</span>
-
-        <span class="k">private</span> <span class="n">HttpContextBase</span> <span class="n">context</span><span class="p">;</span>
-
-        <span class="k">private</span> <span class="n">HttpContextBase</span> <span class="n">Context</span>
-        <span class="p">{</span>
-            <span class="k">get</span>
-            <span class="p">{</span>
-                <span class="k">if</span> <span class="p">(</span><span class="n">context</span> <span class="p">==</span> <span class="k">null</span><span class="p">)</span>
-                    <span class="k">this</span><span class="p">.</span><span class="n">context</span> <span class="p">=</span> <span class="k">this</span><span class="p">.</span><span class="n">httpContext</span><span class="p">();</span>
-
-                <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="n">context</span><span class="p">;</span>
-            <span class="p">}</span>
+            <span class="k">return</span> <span class="k">new</span> <span class="nf">Contact</span><span class="p">(</span><span class="s">&quot;12345678&quot;</span><span class="p">);</span>
         <span class="p">}</span>
     <span class="p">}</span>
 </code></pre></div>
-<p>Finally we have our <code>CorrelatingLogInterceptor</code> that ties all these pieces together.  You&#39;ll see that the interceptor simply fetches the first argument (which is always the message for our <code>ILog</code> type), adds the correlation ID to it, updates the method argument, then calls the inner logger.  You&#39;ll notice that the interceptor does not currently guard that it has been applied to a correct invocation.  In other words, if you 
-configured this interceptor against a type that isn&#39;t ILog, the implementation will not notice or care (until an exception gets thrown).  We rely on Windsor to properly use our <code>IModelInterceptorsSelector</code> that contains the logic to apply the interceptor (not shown). </p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp"> <span class="k">public</span> <span class="k">class</span> <span class="nc">CorrelatingLogInterceptor</span> <span class="p">:</span> <span class="n">IInterceptor</span>
-    <span class="p">{</span>       
-        <span class="k">private</span> <span class="k">readonly</span> <span class="n">ICorrelationProvider</span> <span class="n">provider</span><span class="p">;</span>
-
-        <span class="k">public</span> <span class="nf">CorrelatingLogInterceptor</span><span class="p">(</span><span class="n">ICorrelationProvider</span> <span class="n">provider</span><span class="p">)</span>
+<p>So here, what is <code>request</code>?  Well remember, we&#39;re asking the Fixture to resolve <code>Contact</code> for us and our specimen builder&#39;s purpose is to create an entire <code>Contact</code> so <code>request</code> would be a Type.  But it&#39;s not just any arbitrary <code>Type</code>, our builder would only care about <code>Contact</code>.  The builder above follows a standard form:  attempt to cast <code>request</code> into what it&#39;s able to operate on, ensure that we did indeed get a request we can handle (returning <code>NoSpecimen</code> if we can&#39;t), and then create our desired instance.  In the above, we&#39;re hardcoding &quot;12345678&quot; as the parameter to the <code>Contact</code> constructor.  What if we want AutoFixture to make a random integer for us to use for that purpose?  Simple enough to use the <code>context</code> to resolve that for us:</p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="k">return</span> <span class="k">new</span> <span class="nf">Contact</span><span class="p">(</span><span class="n">context</span><span class="p">.</span><span class="n">Create</span><span class="p">&lt;</span><span class="kt">int</span><span class="p">&gt;().</span><span class="n">ToString</span><span class="p">());</span>
+</code></pre></div>
+<p>Now we&#39;re able to create a <code>Contact</code> with a properly numeric PersonId whose value is being provided by the fixture&#39;s normal integer rules.  The final step is to tell AutoFixture about the specimen builder:</p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="n">fixture</span><span class="p">.</span><span class="n">Customizations</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="k">new</span> <span class="n">ContactGenerator</span><span class="p">());</span>
+</code></pre></div>
+<p>Now you have a specimen builder capable of constructing a given type for you and perhaps that is sufficient for your needs.  But let&#39;s say <code>Contact</code> gets a bit more interesting:</p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="k">public</span> <span class="k">class</span> <span class="nc">Contact</span>
+    <span class="p">{</span>
+        <span class="k">public</span> <span class="nf">Contact</span><span class="p">(</span><span class="kt">string</span> <span class="n">personId</span><span class="p">,</span> <span class="kt">string</span> <span class="n">firstName</span><span class="p">,</span> <span class="kt">string</span> <span class="n">lastName</span><span class="p">,</span> <span class="kt">int</span> <span class="n">level</span><span class="p">)</span>
         <span class="p">{</span>
-            <span class="k">if</span> <span class="p">(</span><span class="n">provider</span> <span class="p">==</span> <span class="k">null</span><span class="p">)</span>
-                <span class="k">throw</span> <span class="k">new</span> <span class="nf">ArgumentNullException</span><span class="p">(</span><span class="s">&quot;provider&quot;</span><span class="p">);</span>
-
-            <span class="k">this</span><span class="p">.</span><span class="n">provider</span> <span class="p">=</span> <span class="n">provider</span><span class="p">;</span>
+            <span class="c1">/// elided</span>
         <span class="p">}</span>
 
-        <span class="k">public</span> <span class="k">void</span> <span class="nf">Intercept</span><span class="p">(</span><span class="n">IInvocation</span> <span class="n">invocation</span><span class="p">)</span>
-        <span class="p">{</span>
-            <span class="k">try</span>
-            <span class="p">{</span>
-                <span class="kt">var</span> <span class="n">message</span> <span class="p">=</span> <span class="n">GetMessageArgument</span><span class="p">(</span><span class="n">invocation</span><span class="p">);</span>
-                <span class="kt">var</span> <span class="n">correlationId</span> <span class="p">=</span> <span class="n">provider</span><span class="p">.</span><span class="n">GetCorrelationIdentifier</span><span class="p">();</span>
-                <span class="kt">var</span> <span class="n">newMessage</span> <span class="p">=</span> <span class="n">UpdateMessage</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">correlationId</span><span class="p">);</span>
-                <span class="n">UpdateArgument</span><span class="p">(</span><span class="n">invocation</span><span class="p">,</span> <span class="n">newMessage</span><span class="p">);</span>
-            <span class="p">}</span>
-            <span class="k">catch</span> <span class="p">(</span><span class="n">Exception</span> <span class="n">ex</span><span class="p">)</span>
-            <span class="p">{</span>
-            <span class="p">}</span>
-            <span class="k">finally</span>
-            <span class="p">{</span>
-                <span class="n">invocation</span><span class="p">.</span><span class="n">Proceed</span><span class="p">();</span>
-            <span class="p">}</span>
-        <span class="p">}</span>
-
-        <span class="k">private</span> <span class="kt">string</span> <span class="nf">GetMessageArgument</span><span class="p">(</span><span class="n">IInvocation</span> <span class="n">invocation</span><span class="p">)</span>
-        <span class="p">{</span>
-            <span class="k">return</span> <span class="n">invocation</span><span class="p">.</span><span class="n">Arguments</span><span class="p">.</span><span class="n">First</span><span class="p">()</span> <span class="k">as</span> <span class="kt">string</span><span class="p">;</span>
-        <span class="p">}</span>
-
-        <span class="k">private</span> <span class="kt">string</span> <span class="nf">UpdateMessage</span><span class="p">(</span><span class="kt">string</span> <span class="n">message</span><span class="p">,</span> <span class="kt">string</span> <span class="n">correlationId</span><span class="p">)</span>
-        <span class="p">{</span>
-            <span class="k">return</span> <span class="kt">string</span><span class="p">.</span><span class="n">Format</span><span class="p">(</span><span class="s">&quot;{0}\n{1}: {2}&quot;</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="s">&quot;Correlation ID: &quot;</span><span class="p">,</span> <span class="n">correlationId</span><span class="p">);</span>
-        <span class="p">}</span>
-
-        <span class="k">private</span> <span class="k">void</span> <span class="nf">UpdateArgument</span><span class="p">(</span><span class="n">IInvocation</span> <span class="n">invocation</span><span class="p">,</span> <span class="kt">string</span> <span class="n">newMessage</span><span class="p">)</span>
-        <span class="p">{</span>
-            <span class="n">invocation</span><span class="p">.</span><span class="n">SetArgumentValue</span><span class="p">(</span><span class="m">0</span><span class="p">,</span> <span class="n">newMessage</span><span class="p">);</span>
-        <span class="p">}</span>
+        <span class="k">public</span> <span class="kt">string</span> <span class="n">PersonId</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+        <span class="k">public</span> <span class="kt">int</span> <span class="n">Level</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+        <span class="k">public</span> <span class="kt">string</span> <span class="n">FirstName</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+        <span class="k">public</span> <span class="kt">string</span> <span class="n">LastName</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
     <span class="p">}</span>
 </code></pre></div>
-<p>This concludes the write-up on correlation event log entries across an MVC application using a Windsor interceptor and custom correlation provider on top of <code>HttpContext.Items</code>.  </p>
+<p>So here our contact has a PersonId (using the same numeric string rules as before), a level (an integer from 1 to 3), and first name and last name.  Let&#39;s assume that names are not particularly interesting, but there are valid reasons to use different levels in your testing, but again, they must be constrained within a specified range.  </p>
+
+<p>We can let AutoFixture just provide us with random strings for the names, but we cannot simply ask it for an integer for level as we must constrain it to a certain range.  How can we support that?  Of course one way is to extend our <code>ContactGenerator</code> class to now include rules for constraining levels.  That might look like:</p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">     <span class="k">return</span> <span class="k">new</span> <span class="nf">Contact</span><span class="p">(</span><span class="n">context</span><span class="p">.</span><span class="n">Create</span><span class="p">&lt;</span><span class="kt">int</span><span class="p">&gt;().</span><span class="n">ToString</span><span class="p">(),</span>
+                               <span class="n">context</span><span class="p">.</span><span class="n">Create</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">&gt;(),</span> <span class="n">context</span><span class="p">.</span><span class="n">Create</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">&gt;(),</span>
+                               <span class="k">new</span> <span class="nf">Random</span><span class="p">().</span><span class="n">Next</span><span class="p">(</span><span class="m">1</span><span class="p">,</span> <span class="m">3</span><span class="p">));</span>
+</code></pre></div>
+<p>This seems to work fine, but something about it feels a little off.  For one, we&#39;ve got a lot of rules about our system and its valid inputs buried within this builder instead of having them be explicit.  Sometimes, this suggests the need to make a concept more explicit, possibly by introducing <code>PersonId</code> and <code>Level</code> as value objects that properly communicate our intent.  Let&#39;s say we introduce such types as shown below:</p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="k">public</span> <span class="k">class</span> <span class="nc">PersonId</span>
+    <span class="p">{</span>
+        <span class="k">public</span> <span class="nf">PersonId</span><span class="p">(</span><span class="kt">string</span> <span class="n">personId</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(!</span><span class="n">personId</span><span class="p">.</span><span class="n">IsNumeric</span><span class="p">())</span>
+                <span class="k">throw</span> <span class="k">new</span> <span class="nf">ArgumentException</span><span class="p">(</span><span class="s">&quot;personId&quot;</span><span class="p">);</span>
+
+            <span class="k">this</span><span class="p">.</span><span class="n">Id</span> <span class="p">=</span> <span class="n">personId</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="kt">string</span> <span class="n">Id</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="k">public</span> <span class="k">class</span> <span class="nc">ContactLevel</span>
+    <span class="p">{</span>
+        <span class="k">public</span> <span class="nf">ContactLevel</span><span class="p">(</span><span class="kt">int</span> <span class="n">level</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">level</span> <span class="p">&lt;=</span> <span class="m">0</span> <span class="p">||</span> <span class="n">level</span> <span class="p">&gt;</span> <span class="m">3</span><span class="p">)</span>
+                <span class="k">throw</span> <span class="k">new</span> <span class="nf">ArgumentException</span><span class="p">(</span><span class="s">&quot;level&quot;</span><span class="p">);</span>
+
+            <span class="k">this</span><span class="p">.</span><span class="n">Level</span> <span class="p">=</span> <span class="n">level</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="kt">int</span> <span class="n">Level</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+    <span class="p">}</span>
+</code></pre></div>
+<p>That changes our <code>Contact</code> constructor to:</p>
+<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="k">public</span> <span class="nf">Contact</span><span class="p">(</span><span class="n">PersonId</span> <span class="n">personId</span><span class="p">,</span> <span class="kt">string</span> <span class="n">firstName</span><span class="p">,</span> <span class="kt">string</span> <span class="n">lastName</span><span class="p">,</span> <span class="n">ContactLevel</span> <span class="n">level</span><span class="p">)</span>
+</code></pre></div>
+<p>Now asking AutoFixture to resolve <code>Contact</code> will cause it to resolve <code>PersonId</code>&#39; and <code>ContactLevel</code>.  But aren&#39;t we back where we started?  Again, <code>PersonId</code> must take a numeric string and <code>ContactLevel</code> must take an integer between 1 and 3.  Should we extend <code>ContactGenerator</code> to include that logic?  In my opinion, definitely not.  <code>ContactGenerator</code> doesn&#39;t have any special rules around the <code>PersonId</code> and <code>ContactLevel</code> it can take, it just requires that it receive instances of each so imbuing it with the rules for creating a Contact don&#39;t really make sense.   Of course we can create additional specimen builders for <code>ContactLevel</code> and <code>PersonId</code> and put the rules for each in those and that will work fine, but there is another main type of specimen builder that we need to discuss and that will be the subject of a future post. </p>
  	
 	</div>
 	<hr />
