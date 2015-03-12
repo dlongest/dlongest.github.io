@@ -50,6 +50,160 @@
 <div class="row">
  <div class="col-lg-12">		
           
+	<h2><a href="/2015/03/12/basics-pipes-and-filters.html">Evolving to Pipes and Filters</a></h2>
+	<div class="date">12 March 2015</div>	
+	<div class="post">
+	<p>In a <a href="2015/03/10/cte-and-windowing-functions.html">prior post</a>, we looked at a pretty straightforward problem:  given data set representing job applicants, we wanted to massage it into a slightly different format for import into a new system and we examined how to use common table expressions and windowing functions to achieve it with pretty minimal effort.  This same problem lends itself quite nicely to a particular design pattern called pipes and filters so in this post we will explore that technique against this same problem.  </p>
+
+<p>A quick refresher on the problem, we have a table that resembles the below:</p>
+
+<table class="sql">
+<tr><th>Name</th><th>Phone</th><th>EyeColor</th><th>PositionID</th><th>Title</th></tr>
+<tr><td>Franklin</td><td>1212</td><td>Blue</td><td>123</td><td>General Manager</td></tr>
+<tr><td>Franklin</td><td>1212</td><td>Blue</td><td>67</td><td>Salesman</td></tr>
+<tr><td>Pierce</td><td>1313</td><td>Blue</td><td>234</td><td>Digger</td></tr>
+<tr><td>Pierce</td><td>1313</td><td>Blue</td><td>456</td><td>Porter</td></tr>
+<tr><td>Hoolihan</td><td>1414</td><td>Green</td><td>123</td><td>General Manager</td></tr>
+<tr><td>Bob</td><td>1515</td><td>Blue</td><td>86</td><td>Maid</td></tr>
+<tr><td>Bob</td><td>1515</td><td>Blue</td><td>90</td><td>Electrician</td></tr>
+</table>
+
+<p>We want to take that representation and from it, generate a file that looks like the below.  The key pieces:  the Name, Phone, and EyeColor columns should only print one time for a given person, otherwise should be blank; the positions each person has applied for should be sequentially numbered beginning at 1. </p>
+
+<table class="sql">
+<tr><th>Name</th><th>Phone</th><th>EyeColor</th><th>PositionID</th><th>Title</th><th>PositionCount</th></tr>
+<tr><td>Franklin</td><td>1212</td><td>Blue</td><td>123</td><td>General Manager</td><td>1</td></tr>
+<tr><td></td><td></td><td></td><td>67</td><td>Salesman</td><td>2</td></tr>
+<tr><td>Pierce</td><td>1313</td><td>Blue</td><td>234</td><td>Digger</td><td>1</td></tr>
+<tr><td></td><td></td><td></td><td>456</td><td>Porter</td><td>2</td></tr>
+<tr><td>Hoolihan</td><td>1414</td><td>Green</td><td>123</td><td>General Manager</td><td>1</td></tr>
+<tr><td>Bob</td><td>1515</td><td>Blue</td><td>86</td><td>Maid</td><td>1</td></tr>
+<tr><td></td><td></td><td></td><td>90</td><td>Electrician</td><td>2</td></tr>
+</table>
+
+<p>So how might we start this in C#? Well of course the most obvious way might be:</p>
+<div class="highlight"><pre><code class="c# language-c#" data-lang="c#"><span class="k">public</span> <span class="k">class</span> <span class="nc">DataProcessor</span>
+<span class="p">{</span>   
+    <span class="k">public</span> <span class="k">void</span> <span class="nf">Process</span><span class="p">(</span><span class="kt">string</span> <span class="n">connectionString</span><span class="p">,</span> <span class="kt">string</span> <span class="n">outputFilename</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="c1">/// Read records from database into some collection, say IEnumerable&lt;Applicant&gt;</span>
+        <span class="c1">/// For each Applicant, either project it into a new type that contains a &quot;PositionCount&quot; property or if it&#39;s already on Applicant, enrich it</span>
+        <span class="c1">/// Write each Applicant record to a file   </span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">public</span> <span class="k">class</span> <span class="nc">Applicant</span>
+<span class="p">{</span>
+    <span class="k">public</span> <span class="kt">string</span> <span class="n">Name</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+    <span class="k">public</span> <span class="kt">string</span> <span class="n">Phone</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+    <span class="k">public</span> <span class="kt">string</span> <span class="n">EyeColor</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+    <span class="k">public</span> <span class="kt">int</span> <span class="n">PositionID</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+    <span class="k">public</span> <span class="kt">string</span> <span class="n">Title</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+    <span class="k">public</span> <span class="kt">int</span> <span class="n">PositionCount</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>I&#39;ve left out the code to do each piece, but it&#39;s probably exactly what you imagine.  One big thing stands out to me here:  calling this a DataProcessor is a bit of a code smell (much like calling something a <code>Manager</code>):  what are the steps involved in the processing?  What if they need to vary or are sometimes optional?  What if we want to reuse any single step in the process?  What if we want or need different input parameters to drive other processing steps?  We&#39;ve guaranteed that we will perpetually be cracking open this class and tinkering with it to address most of these questions and that&#39;s a big open-closed violation.  </p>
+
+<p>What&#39;s one easy heuristic to spot a potential OCP violation?  Give the method a hyper specific name.  So in this case instead of calling it <code>Process</code>&#39;, what if we named it <code>ReadFromDatabaseThenAddPositionCountThenWriteToFile</code>.  That would make it much clearer that this method is doing too much.  A-ha, you might say.  What if we just broke up the single Process method into separate methods within the class, problem solved!  Or is it?</p>
+<div class="highlight"><pre><code class="c# language-c#" data-lang="c#"><span class="k">public</span> <span class="k">class</span> <span class="nc">DataProcessor</span>
+<span class="p">{</span>   
+    <span class="k">public</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">LoadFromDatabase</span><span class="p">(</span><span class="kt">string</span> <span class="n">connectionString</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="c1">/// Read records from database into some collection, say IEnumerable&lt;Applicant&gt; </span>
+    <span class="p">}</span>
+
+    <span class="k">public</span> <span class="k">void</span> <span class="nf">AddPositionCount</span><span class="p">(</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">applicants</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="c1">/// Compute the number of positions applied for by each individual person and sent Applicant.PositionCount appropriately. </span>
+        <span class="c1">/// Modifies the instances in the passed-in collection</span>
+    <span class="p">}</span>
+
+    <span class="k">public</span> <span class="k">void</span> <span class="nf">WriteToFile</span><span class="p">(</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">applicants</span><span class="p">,</span> <span class="kt">string</span> <span class="n">absoluteFilename</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="c1">/// Write each Applicant record to a file   </span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>So now the use of our <code>DataProcessor</code> is fairly clear:</p>
+<div class="highlight"><pre><code class="c# language-c#" data-lang="c#">    <span class="kt">var</span> <span class="n">processor</span> <span class="p">=</span> <span class="k">new</span> <span class="n">DataProcessor</span><span class="p">();</span>
+    <span class="kt">var</span> <span class="n">applicants</span> <span class="p">=</span> <span class="n">processor</span><span class="p">.</span><span class="n">LoadFromDatabase</span><span class="p">(</span><span class="cm">/* string */</span><span class="p">);</span>
+    <span class="n">processor</span><span class="p">.</span><span class="n">AddPositionCount</span><span class="p">(</span><span class="n">applicants</span><span class="p">);</span>
+    <span class="n">processor</span><span class="p">.</span><span class="n">WriteToFile</span><span class="p">(</span><span class="n">applicants</span><span class="p">,</span> <span class="s">&quot;some_file.txt&quot;</span><span class="p">);</span>
+</code></pre></div>
+<p>Yes, much clearer, but we still have some of the same issues we had before.  If we want to add more steps, we have to open up <code>DataProcessor</code> and add methods to it.  If we wanted to reuse any of the steps (were that possible), we can&#39;t do it cleanly.  And it&#39;s pretty evident here that single responsibility principle is being violated:  this class is doing at least 3 things and that list would only grow if more were added.  So what should we do?</p>
+
+<p>If we agree that each of the methods in the current <code>DataProcessor</code> class is its own responsibility, what if we tried to find a design that put each of those in its own class?  Just shuffling the code around, we would have:</p>
+<div class="highlight"><pre><code class="c# language-c#" data-lang="c#"><span class="k">public</span> <span class="k">class</span> <span class="nc">ApplicantLoader</span>
+<span class="p">{</span>
+    <span class="k">public</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">LoadFromDatabase</span><span class="p">(</span><span class="kt">string</span> <span class="n">connectionString</span><span class="p">)</span> <span class="p">{</span> <span class="cm">/* */</span> <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">public</span> <span class="k">class</span> <span class="nc">ApplicantEnricher</span>
+<span class="p">{</span>
+    <span class="k">public</span> <span class="k">void</span> <span class="nf">AddPositionCount</span><span class="p">(</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">applicants</span><span class="p">)</span> <span class="p">{</span> <span class="cm">/* */</span> <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">public</span> <span class="k">class</span> <span class="nc">ApplicantWriter</span>
+<span class="p">{</span>
+    <span class="k">public</span> <span class="k">void</span> <span class="nf">WriteToFile</span><span class="p">(</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">applicants</span><span class="p">,</span> <span class="kt">string</span> <span class="n">absoluteFilename</span><span class="p">)</span> <span class="p">{</span> <span class="cm">/* */</span> <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>Now we&#39;ve cleaned up SRP and OCP violations quite nicely.  These classes decompose the problem into the distinct steps that previously were rather implicit (or at least coupled together) in the single <code>DataProcessor</code>.  But I think we can go one step further.  What&#39;s common about these three classes?  All of them work against a collection of Applicants.  And if we rewrite <code>ApplicantEnricher</code> as:</p>
+<div class="highlight"><pre><code class="c# language-c#" data-lang="c#"><span class="k">public</span> <span class="k">class</span> <span class="nc">ApplicantEnricher</span>
+<span class="p">{</span>
+    <span class="k">public</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">AddPositionCount</span><span class="p">(</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">applicants</span><span class="p">)</span> <span class="p">{</span> <span class="cm">/* */</span> <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>Then we can quite clearly see there are 3 different types of activities going on here:  an initial source of Applicant records; a specific type of processing against the Applicant records that passes them forward; a sink that logically ends the processing chain in some way (such as writing to a file).  It is from this revelation that we can view this problem as befitting pipes and filters.  In this parlance a filter is a component that takes some input, processes it in some way, and sends forward either that same input or a different input.  A pipe refers to the connection between filters, but that doesn&#39;t always lend itself directly to a single component (so there may not be an <code>IPipe</code> abstraction necessarily). </p>
+
+<p><img src="/images/pipes_and_filters.png"  /></p>
+
+<p>One basic implementation of this pattern starts with a handful of interfaces:</p>
+<div class="highlight"><pre><code class="c# language-c#" data-lang="c#"><span class="k">public</span> <span class="k">interface</span> <span class="n">ISourceInput</span> <span class="p">{</span> <span class="p">}</span>
+
+<span class="k">public</span> <span class="k">interface</span> <span class="n">ISource</span><span class="p">&lt;</span><span class="n">TIn</span><span class="p">,</span> <span class="n">TOut</span><span class="p">&gt;</span> <span class="k">where</span> <span class="n">TIn</span> <span class="p">:</span> <span class="n">ISourceInput</span>
+<span class="p">{</span>
+    <span class="n">TOut</span> <span class="nf">Load</span><span class="p">(</span><span class="n">TIn</span> <span class="n">input</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">public</span> <span class="k">interface</span> <span class="n">IFilter</span><span class="p">&lt;</span><span class="n">TIn</span><span class="p">,</span> <span class="n">TOut</span><span class="p">&gt;</span>
+<span class="p">{</span>
+    <span class="n">TOut</span> <span class="nf">Filter</span><span class="p">(</span><span class="n">TIn</span> <span class="n">input</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">public</span> <span class="k">interface</span> <span class="n">ISink</span><span class="p">&lt;</span><span class="n">TIn</span><span class="p">&gt;</span>
+<span class="p">{</span>
+    <span class="k">void</span> <span class="nf">Sink</span><span class="p">(</span><span class="n">TIn</span> <span class="n">input</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>We define a marker interface <code>ISourceInput</code> that is used to tag any custom class we make that contains configuration or input parameters.  This isn&#39;t strictly required, but I do it to be slightly more explicit.  I find it generally true marker interfaces are a bit of a code smell.  Next the <code>ISource</code> interface is used to define our Source component.  Interestingly, since we&#39;ve stipulated the source must take an input, <code>ISource</code> and <code>IFilter</code> differ only in that the former has a type constraint but again, I think there&#39;s value in being explicit here - nothing stops you from having the filter component also implement <code>ISource</code>.   A Sink can also be a Filter if one just ignores the output from the Sink.  We can now implement our previous components in light of these interfaces:</p>
+<div class="highlight"><pre><code class="c# language-c#" data-lang="c#"><span class="k">public</span> <span class="k">class</span> <span class="nc">LoadApplicantSourceInput</span> <span class="p">:</span> <span class="n">ISourceInput</span>
+<span class="p">{</span>
+    <span class="k">public</span> <span class="kt">string</span> <span class="n">ConnectionString</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">public</span> <span class="k">class</span> <span class="nc">LoadApplicantsSource</span> <span class="p">:</span> <span class="n">ISource</span><span class="p">&lt;</span><span class="n">LoadApplicantSourceInput</span><span class="p">,</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;&gt;</span>
+<span class="p">{</span>
+    <span class="k">public</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">Load</span><span class="p">(</span><span class="n">LoadApplicantSourceInput</span> <span class="n">input</span><span class="p">)</span> <span class="p">{</span> <span class="p">}</span> 
+<span class="p">}</span>
+
+<span class="k">public</span> <span class="k">class</span> <span class="nc">ComputePositionCountForApplicantFilter</span> <span class="p">:</span> <span class="n">IFilter</span><span class="p">&lt;</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;,</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;&gt;</span>
+<span class="p">{</span>
+    <span class="k">public</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">Filter</span><span class="p">(</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">applicants</span><span class="p">)</span> <span class="p">{</span> <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">public</span> <span class="k">class</span> <span class="nc">WriteApplicantsToFileSink</span> <span class="p">:</span> <span class="n">ISink</span><span class="p">&lt;</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;&gt;</span>
+<span class="p">{</span>
+    <span class="k">public</span> <span class="nf">WriteApplicantsToFileSink</span><span class="p">(</span><span class="kt">string</span> <span class="n">filename</span><span class="p">)</span> <span class="p">{</span> <span class="p">}</span>
+
+    <span class="k">public</span> <span class="k">void</span> <span class="nf">Sink</span><span class="p">(</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">applicants</span><span class="p">)</span> <span class="p">{</span> <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>It&#39;s roughly the same code as we wrote initially, but we&#39;ve simply split it up into components and raised the level of abstraction.  There&#39;s arguably a few strange things (why does the Source take an input for the connection string, but we provide the output file name to the Sink as a constructor argument) but any of those could be cleaned up or changed based on preference or the particular system they&#39;re being employed in.</p>
+ 	
+	</div>
+	<hr />
+      
 	<h2><a href="/2015/03/10/cte-and-windowing-functions.html">Basics of Common Table Expressions and Windowing Functions</a></h2>
 	<div class="date">10 March 2015</div>	
 	<div class="post">
@@ -137,142 +291,6 @@
 <p>So we&#39;ve seen some benefits of CTE, what are the downsides?  First, they are only in scope for a single query.  If you want to reuse them, they have to be copied and pasted into all places that need to reference them.  If you have such a need, temp tables or something more permanent (or semi-permanent) is a better bet.  Second, because they do not exist in tempdb, you cannot add indexes or anything that would improve the performance (and constraints and stats are likewise not available).  Again, if that&#39;s your need, a temp table would be more in order.  </p>
 
 <p>I hope you&#39;ve enjoyed this basic look at common table expressions and windowing functions in SQL Server.  This has only scratched the surface of these features so I definitely suggest working through some examples to get a feel for how and when each can be applied in real life situations.  </p>
- 	
-	</div>
-	<hr />
-      
-	<h2><a href="/2015/03/07/intro-to-specimen-builders-in-autofixture.html">Introduction to Custom Specimen Builders in AutoFixture</a></h2>
-	<div class="date">7 March 2015</div>	
-	<div class="post">
-	<p>It is no secret at work that I greatly admire Mark Seemann.  Anyone that comes to me and asks about software design I steer them right to his book &quot;Dependency Injection in .NET&quot;.  In some respects, the title does it a bit of a disservice as at least half of it discusses some critical component design practices that apply regardless of whether one wants to use dependency injection.  Don&#39;t get me wrong, he covers dependency injection quite comprehensively, but there&#39;s a lot more to DI than just picking a container.  Beyond his book, Mark is an incredibly accessible guy in a couple respects.  One, he blogs pretty regularly and has a lot of incredible posts on design, I find myself going back to them again and again.  And two, he is the author of AutoFixture, which needs almost no introduction in the .NET world.  And it is this library that is the subject of this post. </p>
-
-<p>When I explain AutoFixture to other developers, I start by emphasizing its most straightforward use: when writing unit tests, it will provide you with test data with almost no setup, as if by magic.  Whether you needs integers or strings or collections or even complex objects, AutoFixture will provide them to you in a semi-random fashion.  Within the AutoFixture codebase, the components that handle creation of some value are termed specimen builders and they inherit <code>ISpecimenBuilder</code>.  A few common examples:  </p>
-
-<ul>
-<li><code>Int32Generator</code> is the specimen builder that generates integers, beginning at 1 and incrementing by 1 for each subsequent integer that the fixture creates.<br></li>
-<li><code>StringGenerator</code> generates strings and the default randomization is to append a GUID to the name of the property or field</li>
-<li><code>RandomRangedNumberGenerator</code> generates a random number within a given range, but doesn&#39;t repeat numbers in that range until all values have been used (shameless plug: I submitted this to AutoFixture)</li>
-</ul>
-
-<p>And of course there are plenty more beyond that that do a variety of things.  Mark has an older but still valid post from 2010 on how to approach creating a custom specimen builder, but I think there&#39;s some nuances to it that aren&#39;t entirely clear to new users of AutoFixture.  I know when I introduced AutoFixture at work we used it in a sub-optimal manner because it wasn&#39;t always clear how to best customize it for certain situations and I want to save others some effort in the future since there isn&#39;t always time to dig into new libraries like one would hope.  This in no way takes away from how incredible AutoFixture is or how responsive Mark and others (Adam Chester and Nikos Baxevanis among them) are to questions about it on Stack Overflow or elsewhere, just my attempt to contribute some first-hand experience and perspective.</p>
-
-<p>The <code>ISpecimenBuilder</code> interface has the following signature (taken directly from the AutoFixture codebase):</p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="k">public</span> <span class="k">interface</span> <span class="n">ISpecimenBuilder</span>
-    <span class="p">{</span>        
-        <span class="kt">object</span> <span class="nf">Create</span><span class="p">(</span><span class="kt">object</span> <span class="n">request</span><span class="p">,</span> <span class="n">ISpecimenContext</span> <span class="n">context</span><span class="p">);</span>
-    <span class="p">}</span>
-</code></pre></div>
-<p>Here, <code>request</code> is <em>something</em> that needs to be created (and I&#39;ll come back to that in a minute).  The <code>context</code> can be used if necessary to generate other values from the fixture, but is not always needed.  For example, <code>Int32Generator</code> has no need of the <code>context</code> as it contains all the knowledge for satisfying its creation goals.  But suppose you&#39;re creating a specimen builder for a complex type and in the course of that, you want AutoFixture to provide some value (of any type)?  In that case you can use the <code>context</code> to obtain it (I&#39;m intentionally omitting why you get <code>ISpecimenContext</code> and not <code>IFixture</code>).  </p>
-
-<p>Request is ambiguously typed as <code>object</code> - what is it?  Typically, <code>request</code> is one of:</p>
-
-<ul>
-<li>A <code>Type</code></li>
-<li>A <code>PropertyInfo</code></li>
-<li>A <code>ParameterInfo</code></li>
-</ul>
-
-<p>And that brings us finally to the point of this post:  why on earth is that and what does it mean for us trying to create a custom specimen builder?</p>
-
-<p>We&#39;ll start with the most obvious, Type.  At the most basic level, use of AutoFixture generally looks like:</p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="kt">var</span> <span class="n">fixture</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Fixture</span><span class="p">();</span>            
-    <span class="kt">var</span> <span class="n">contact</span> <span class="p">=</span> <span class="n">fixture</span><span class="p">.</span><span class="n">Create</span><span class="p">&lt;</span><span class="n">Contact</span><span class="p">&gt;();</span>
-</code></pre></div>
-<p>We create a Fixture, then we ask it for the type <code>Contact</code>, which is defined as:</p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">     <span class="k">public</span> <span class="k">class</span> <span class="nc">Contact</span>
-    <span class="p">{</span>
-        <span class="k">public</span> <span class="nf">Contact</span><span class="p">(</span><span class="kt">string</span> <span class="n">personId</span><span class="p">)</span>
-        <span class="p">{</span>
-            <span class="n">PersonId</span> <span class="p">=</span> <span class="n">personId</span><span class="p">;</span>
-        <span class="p">}</span>
-
-        <span class="k">public</span> <span class="kt">string</span> <span class="n">PersonId</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span>  <span class="p">}</span>
-    <span class="p">}</span>
-</code></pre></div>
-<p>AutoFixture now attempts to satisfy the request for a contact by running it through a variety of specimen builders in an implementation of the powerful chain of responsibility pattern.  The chain in this case is (among other things) a collection of specimen builders that individually assess whether they are capable of providing a value of type <code>Contact</code>.  The request to create it falls through each builder in the chain until one finally returns an actual <code>Contact</code> (each returns a <code>NoSpecimen</code> if it cannot handle the request).  But what does it mean to create a Contact?  </p>
-
-<p>As shown, AutoFixture will find that Contact has one constructor and that this constructor takes a string.  So AutoFixture will automatically attempt to resolve creation of a string, then use that to create the <code>Contact</code> via its constructor.  This would be true regardless of how many dependencies the constructor had or their type.  And if there are multiple constructors, AutoFixture selects among them (by default, taking the one with the fewest parameters).  So from that view, AutoFixture creating an instance of an arbitrary complex type is simply the creation of any dependencies of that type until the entire graph is constructed. </p>
-
-<p>Now let&#39;s say for the sake of argument that PersonId, despite being typed as a string, is actually numeric.  We&#39;ve already seen earlier that AutoFixture, by default, will make strings whose value are the property name and a GUID so we know that the default is not going to work for us here.  The first and easiest approach to this is:</p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="kt">var</span> <span class="n">fixture</span> <span class="p">=</span> <span class="k">new</span> <span class="n">Fixture</span><span class="p">();</span>
-    <span class="n">fixture</span><span class="p">.</span><span class="n">Register</span><span class="p">(()</span> <span class="p">=&gt;</span> <span class="s">&quot;12345678&quot;</span><span class="p">);</span>
-    <span class="kt">var</span> <span class="n">contact</span> <span class="p">=</span> <span class="n">fixture</span><span class="p">.</span><span class="n">Create</span><span class="p">&lt;</span><span class="n">Contact</span><span class="p">&gt;();</span>
-</code></pre></div>
-<p>This solves one problem (PersonId on the Contact will be &quot;12345678&quot;) <em>except</em> this will cause AutoFixture to use &quot;12345678&quot; for every string it creates.  So we&#39;ve overreached a bit here.  Of course we could use some method that generates a random integer and uses that instead of a hard-coded one, but again, it will use that random numeric string everywhere.  At some point, it might occur to us &quot;What if we could customize the creation of Contact as a whole instead of at the string level?&quot;  Enter a custom specimen builder.  </p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="k">public</span> <span class="k">class</span> <span class="nc">ContactGenerator</span> <span class="p">:</span> <span class="n">ISpecimenBuilder</span>
-    <span class="p">{</span>
-        <span class="k">public</span> <span class="kt">object</span> <span class="nf">Create</span><span class="p">(</span><span class="kt">object</span> <span class="n">request</span><span class="p">,</span> <span class="n">ISpecimenContext</span> <span class="n">context</span><span class="p">)</span>
-        <span class="p">{</span>
-            <span class="kt">var</span> <span class="n">type</span> <span class="p">=</span> <span class="n">request</span> <span class="k">as</span> <span class="n">Type</span><span class="p">;</span>
-
-            <span class="k">if</span> <span class="p">(</span><span class="n">type</span> <span class="p">==</span> <span class="k">null</span><span class="p">)</span>
-                <span class="k">return</span> <span class="k">new</span> <span class="nf">NoSpecimen</span><span class="p">(</span><span class="n">request</span><span class="p">);</span>
-
-            <span class="k">if</span> <span class="p">(</span><span class="n">type</span> <span class="p">!=</span> <span class="k">typeof</span><span class="p">(</span><span class="n">Contact</span><span class="p">))</span>
-                <span class="k">return</span> <span class="k">new</span> <span class="nf">NoSpecimen</span><span class="p">(</span><span class="n">request</span><span class="p">);</span>
-
-            <span class="k">return</span> <span class="k">new</span> <span class="nf">Contact</span><span class="p">(</span><span class="s">&quot;12345678&quot;</span><span class="p">);</span>
-        <span class="p">}</span>
-    <span class="p">}</span>
-</code></pre></div>
-<p>So here, what is <code>request</code>?  Well remember, we&#39;re asking the Fixture to resolve <code>Contact</code> for us and our specimen builder&#39;s purpose is to create an entire <code>Contact</code> so <code>request</code> would be a Type.  But it&#39;s not just any arbitrary <code>Type</code>, our builder would only care about <code>Contact</code>.  The builder above follows a standard form:  attempt to cast <code>request</code> into what it&#39;s able to operate on, ensure that we did indeed get a request we can handle (returning <code>NoSpecimen</code> if we can&#39;t), and then create our desired instance.  In the above, we&#39;re hardcoding &quot;12345678&quot; as the parameter to the <code>Contact</code> constructor.  What if we want AutoFixture to make a random integer for us to use for that purpose?  Simple enough to use the <code>context</code> to resolve that for us:</p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="k">return</span> <span class="k">new</span> <span class="nf">Contact</span><span class="p">(</span><span class="n">context</span><span class="p">.</span><span class="n">Create</span><span class="p">&lt;</span><span class="kt">int</span><span class="p">&gt;().</span><span class="n">ToString</span><span class="p">());</span>
-</code></pre></div>
-<p>Now we&#39;re able to create a <code>Contact</code> with a properly numeric PersonId whose value is being provided by the fixture&#39;s normal integer rules.  The final step is to tell AutoFixture about the specimen builder:</p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="n">fixture</span><span class="p">.</span><span class="n">Customizations</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="k">new</span> <span class="n">ContactGenerator</span><span class="p">());</span>
-</code></pre></div>
-<p>Now you have a specimen builder capable of constructing a given type for you and perhaps that is sufficient for your needs.  But let&#39;s say <code>Contact</code> gets a bit more interesting:</p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="k">public</span> <span class="k">class</span> <span class="nc">Contact</span>
-    <span class="p">{</span>
-        <span class="k">public</span> <span class="nf">Contact</span><span class="p">(</span><span class="kt">string</span> <span class="n">personId</span><span class="p">,</span> <span class="kt">string</span> <span class="n">firstName</span><span class="p">,</span> <span class="kt">string</span> <span class="n">lastName</span><span class="p">,</span> <span class="kt">int</span> <span class="n">level</span><span class="p">)</span>
-        <span class="p">{</span>
-            <span class="c1">/// elided</span>
-        <span class="p">}</span>
-
-        <span class="k">public</span> <span class="kt">string</span> <span class="n">PersonId</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
-        <span class="k">public</span> <span class="kt">int</span> <span class="n">Level</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
-        <span class="k">public</span> <span class="kt">string</span> <span class="n">FirstName</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
-        <span class="k">public</span> <span class="kt">string</span> <span class="n">LastName</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
-    <span class="p">}</span>
-</code></pre></div>
-<p>So here our contact has a PersonId (using the same numeric string rules as before), a level (an integer from 1 to 3), and first name and last name.  Let&#39;s assume that names are not particularly interesting, but there are valid reasons to use different levels in your testing, but again, they must be constrained within a specified range.  </p>
-
-<p>We can let AutoFixture just provide us with random strings for the names, but we cannot simply ask it for an integer for level as we must constrain it to a certain range.  How can we support that?  Of course one way is to extend our <code>ContactGenerator</code> class to now include rules for constraining levels.  That might look like:</p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">     <span class="k">return</span> <span class="k">new</span> <span class="nf">Contact</span><span class="p">(</span><span class="n">context</span><span class="p">.</span><span class="n">Create</span><span class="p">&lt;</span><span class="kt">int</span><span class="p">&gt;().</span><span class="n">ToString</span><span class="p">(),</span>
-                               <span class="n">context</span><span class="p">.</span><span class="n">Create</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">&gt;(),</span> <span class="n">context</span><span class="p">.</span><span class="n">Create</span><span class="p">&lt;</span><span class="kt">string</span><span class="p">&gt;(),</span>
-                               <span class="k">new</span> <span class="nf">Random</span><span class="p">().</span><span class="n">Next</span><span class="p">(</span><span class="m">1</span><span class="p">,</span> <span class="m">3</span><span class="p">));</span>
-</code></pre></div>
-<p>This seems to work fine, but something about it feels a little off.  For one, we&#39;ve got a lot of rules about our system and its valid inputs buried within this builder instead of having them be explicit.  Sometimes, this suggests the need to make a concept more explicit, possibly by introducing <code>PersonId</code> and <code>Level</code> as value objects that properly communicate our intent.  Let&#39;s say we introduce such types as shown below:</p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="k">public</span> <span class="k">class</span> <span class="nc">PersonId</span>
-    <span class="p">{</span>
-        <span class="k">public</span> <span class="nf">PersonId</span><span class="p">(</span><span class="kt">string</span> <span class="n">personId</span><span class="p">)</span>
-        <span class="p">{</span>
-            <span class="k">if</span> <span class="p">(!</span><span class="n">personId</span><span class="p">.</span><span class="n">IsNumeric</span><span class="p">())</span>
-                <span class="k">throw</span> <span class="k">new</span> <span class="nf">ArgumentException</span><span class="p">(</span><span class="s">&quot;personId&quot;</span><span class="p">);</span>
-
-            <span class="k">this</span><span class="p">.</span><span class="n">Id</span> <span class="p">=</span> <span class="n">personId</span><span class="p">;</span>
-        <span class="p">}</span>
-
-        <span class="k">public</span> <span class="kt">string</span> <span class="n">Id</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
-    <span class="p">}</span>
-
-    <span class="k">public</span> <span class="k">class</span> <span class="nc">ContactLevel</span>
-    <span class="p">{</span>
-        <span class="k">public</span> <span class="nf">ContactLevel</span><span class="p">(</span><span class="kt">int</span> <span class="n">level</span><span class="p">)</span>
-        <span class="p">{</span>
-            <span class="k">if</span> <span class="p">(</span><span class="n">level</span> <span class="p">&lt;=</span> <span class="m">0</span> <span class="p">||</span> <span class="n">level</span> <span class="p">&gt;</span> <span class="m">3</span><span class="p">)</span>
-                <span class="k">throw</span> <span class="k">new</span> <span class="nf">ArgumentException</span><span class="p">(</span><span class="s">&quot;level&quot;</span><span class="p">);</span>
-
-            <span class="k">this</span><span class="p">.</span><span class="n">Level</span> <span class="p">=</span> <span class="n">level</span><span class="p">;</span>
-        <span class="p">}</span>
-
-        <span class="k">public</span> <span class="kt">int</span> <span class="n">Level</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
-    <span class="p">}</span>
-</code></pre></div>
-<p>That changes our <code>Contact</code> constructor to:</p>
-<div class="highlight"><pre><code class="csharp language-csharp" data-lang="csharp">    <span class="k">public</span> <span class="nf">Contact</span><span class="p">(</span><span class="n">PersonId</span> <span class="n">personId</span><span class="p">,</span> <span class="kt">string</span> <span class="n">firstName</span><span class="p">,</span> <span class="kt">string</span> <span class="n">lastName</span><span class="p">,</span> <span class="n">ContactLevel</span> <span class="n">level</span><span class="p">)</span>
-</code></pre></div>
-<p>Now asking AutoFixture to resolve <code>Contact</code> will cause it to resolve <code>PersonId</code>&#39; and <code>ContactLevel</code>.  But aren&#39;t we back where we started?  Again, <code>PersonId</code> must take a numeric string and <code>ContactLevel</code> must take an integer between 1 and 3.  Should we extend <code>ContactGenerator</code> to include that logic?  In my opinion, definitely not.  <code>ContactGenerator</code> doesn&#39;t have any special rules around the <code>PersonId</code> and <code>ContactLevel</code> it can take, it just requires that it receive instances of each so imbuing it with the rules for creating a Contact don&#39;t really make sense.   Of course we can create additional specimen builders for <code>ContactLevel</code> and <code>PersonId</code> and put the rules for each in those and that will work fine, but there is another main type of specimen builder that we need to discuss and that will be the subject of a future post. </p>
  	
 	</div>
 	<hr />
