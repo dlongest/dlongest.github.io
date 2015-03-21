@@ -1,3 +1,4 @@
+---
 layout: post
 title: The Right Design Makes Your Job Easier, Not Harder
 tags: design
