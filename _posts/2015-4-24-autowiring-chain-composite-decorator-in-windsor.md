@@ -122,7 +122,7 @@ The fact that Windsor will auto-wire this escaped me for quite a long time, but 
 
 The same is also true for the other design patterns as well.
 
-<h2>Decorator<h2>
+<h2>Decorator</h2>
 
 
 A decorator is a pattern where one component of an interface type relies on another instance of that component to do its work.  For example, we may have a class that fetches records from a database and another that caches those records.  The caching component can "decorate" its logic on top of the other component.  Below is a sample set of components we'll work with.  We want SecondDecorator to be on top and contain an instance of FirstDecorator, which will contain an instance of BaseDecoratableService.  
