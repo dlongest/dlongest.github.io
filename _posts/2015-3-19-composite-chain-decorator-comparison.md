@@ -36,16 +36,12 @@ public class ApplicationLogic
 			return repository.GetByPersonIDAndCode(personID, examCode);		
 		}
 		catch (Exception ex ) { // do some stuff, ultimately rethrow }	
-	}
-	
-	// Lot more unrelated methods
+	}	
 }
 
 ````
 
-So first, yes the class in question really is named essentially `ApplicationLogic`, which is a poor name.  Also it has a ton of unrelated methods, basically each one exactly matches a method at the top-level WCF service that's using this class.  Second, yes, it does instantiate from scratch basically a repository instance (it's not called that though), then calls a method on it to retrieve a `Registration`, then returns it.  There's actually a separate repository mixed in there as well whose value I cannot immediately ascertain (because the names for all of them are not helpful; they include the suffix `DAO`).  
-
-Anyway, here's the issue.  The client that's calling this service is showing a lot of data in a basic form to internal users.  It's actually showing the `TestLocation` twice, once sourced from this service (which gets it from the database via the repository) and once from calling a separate service.  The issue is the separate service is basically a persistence cache of person data since our legacy CRM is too slow to provide it to our enterprise site, but by virtue of that, it contains a flat view of the person.  However, the internal form needs to show registrations for any past exam code, but the cache service always only knows about the current one.   So what we'd like to do is insert a call into this service to also call the legacy CRM to fetch its test location, which we would include in our output (so it would return two test locations).  If you imagine just sticking the code into the existing code, might make it look like:
+So first, yes the class in question really is named essentially `ApplicationLogic`, which is a poor name but beside the point.  Here's the issue.  The client that's calling this service is showing a lot of data in a basic form to internal users.  It's actually showing the `TestLocation` twice, once sourced from this service (which gets it from the database via the repository) and once from calling a separate service.  The issue is the separate service is basically a persistence cache of person data since our legacy CRM is too slow to provide it to our enterprise site, but by virtue of that, it contains a flat view of the person.  However, the internal form needs to show registrations for any past exam code, but the cache service always only knows about the current one.   So what we'd like to do is insert a call into this service to also call the legacy CRM to fetch its test location, which we would include in our output (so it would return two test locations).  If you imagine just sticking the code into the existing code, might make it look like:
 
 ````c#
 

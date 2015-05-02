@@ -4,7 +4,7 @@ title: Choose Between Components At Runtime In Castle Windsor With Handler Selec
 tags: design
 description: In Castle Windsor, use a custom IHandlerSelector to choose between components at runtime in cases when you need to perform some kind of conditional component resolution, but both are eligible to be used in different cases. 
 ---
-There are a lot of extensibility points in Castle Windsor, but one common challenge is to find the appropriate one for a given job.  I ran into such a case recently so it seemed worth sharing.  Imagine we have  WCF service and its set up as below where `IMainService` is our service contract whose implementation is `MainService` and it takes as a constructor parameter and implementation of `IDependencyService`.  Early on in our application's life we only have a single implementation of `IDependencyService' called `'DefaultDependencyService`, but now we need to add a second version, `DependencyServiceVersion2`, and at runtime decide which implementation should be used.  
+There are a lot of extensibility points in Castle Windsor, but one common challenge is to find the appropriate one for a given job.  I ran into such a case recently so it seemed worth sharing.  Imagine we have  WCF service and its set up as below where `IMainService` is our service contract whose implementation is `MainService` and it takes as a constructor parameter and implementation of `IDependencyService`.  Early on in our application's life we only have a single implementation of `IDependencyService` called `DefaultDependencyService`, but now we need to add a second version, `DependencyServiceVersion2`, and at runtime decide which implementation should be used.  
 
 ````c#
 [ServiceContract]
