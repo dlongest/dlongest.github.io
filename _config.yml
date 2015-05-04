@@ -1,4 +1,4 @@
 name: Code Like A Champion
-markdown: redcarpet
+markdown: kramdown
 highlighter: rouge
 paginate: 2
