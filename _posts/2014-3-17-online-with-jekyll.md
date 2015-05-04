@@ -4,7 +4,7 @@ title: Online With Jekyll
 tags: general
 description: How I set up Jekyll on Windows 7 machine in a handful of easy, precise steps. 
 ---
-<h3>Update - 5 May 2014</h3>
+<h3>Update - 5 May 2014</h3> 
 I got a new computer so was fearing going through the process of again getting Jekyll set up on the new machine.  However, I came across an [awesome Jekyll for Windows tutorial](http://jekyll-windows.juthilo.com/) that makes it completely painless.  Only slight hiccup is after running `ruby dk.rb init`, it generates a `config.yml` file.  You need to update that to point to your Ruby Dev Kit path before running `ruby dk.rb install`.  However, the error message from the latter makes it pretty clear what to do.  
 
 <h3>Make Jekyll Play Nicely With Windows</h3>
@@ -26,7 +26,7 @@ Unfortunately, Madhur's tutorial, while it listed some errors, didn't have one t
 
 At this point I was feeling good so tried `jekyll serve` again, but still failed.  But I had moved forward from posix-spawn errors to fileutils errors.  A bit more Stack Overflowing turned up that Jekyll 1.4.3 seems to have some bug related to fileutils on Windows.  Simple enough, `gem uninstall jekyll` to remove 1.4.3, then `gem install --version "=1.4.2"` to install 1.4.2.    Run `jekyll serve`, hold my breath, and errors, this time due to needing wdm.  Quick `gem install wdm` installed 0.1.0.  Moment of truth., run `jekyll serve` and... **Success!**
 
-### TL;DR - Make Jekyll Play Nice with Windows 7
+<h3>TL;DR - Make Jekyll Play Nice with Windows 7</h3>
 To summarize the versions I had to use:
 
 1. Ruby 1.9.3
