@@ -4,6 +4,10 @@ title: Online With Jekyll
 tags: general
 description: How I set up Jekyll on Windows 7 machine in a handful of easy, precise steps. 
 ---
+<h3>Update - 5 May 2014</h3>
+I got a new computer so was fearing going through the process of again getting Jekyll set up on the new machine.  However, I came across an [awesome Jekyll for Windows tutorial](http://jekyll-windows.juthilo.com/) that makes it completely painless.  Only slight hiccup is after running `ruby dk.rb init`, it generates a `config.yml` file.  You need to update that to point to your Ruby Dev Kit path before running `ruby dk.rb install`.  However, the error message from the latter makes it pretty clear what to do.  
+
+<h3>Make Jekyll Play Nicely With Windows</h3>
 This is the inaugural entry in my blog covering various software development topics, especially related to code design and dev practices.  To kick this off, I'm going to briefly describe the steps I had to follow to get Jekyll Bootstrap online on Windows 7 as I had a bit of trouble that some of the excellent tutorials didn't quite cover.
 
 I had planned to just use Wordpress and purchase some domain hosting through someone like Bluehost as that seemed like a relatively well traveled path to get going.  But for some reason, I seemed to have some block at getting things set up.  I read [Mark Seemann's excellent blog](http://blog.ploeh.dk/) and he had a post about switching to Jekyll right at a year ago, but it didn't mean much to me as I wasn't familiar with Github, amongst other challenges.

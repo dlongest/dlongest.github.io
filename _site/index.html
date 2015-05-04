@@ -50,247 +50,334 @@
 <div class="row">
  <div class="col-lg-12">		
           
-	<h2><a href="/2015/03/12/basics-pipes-and-filters.html">Evolving to Pipes and Filters</a></h2>
-	<div class="date">12 March 2015</div>	
+	<h2><a href="/2015/04/24/autowiring-chain-composite-decorator-in-windsor.html">Registering Decorators, Composites, and Chains in Castle Windsor</a></h2>
+	<div class="date">24 April 2015</div>	
 	<div class="post">
-	<p>In a <a href="2015/03/10/cte-and-windowing-functions.html">prior post</a>, we looked at a pretty straightforward problem:  given data set representing job applicants, we wanted to massage it into a slightly different format for import into a new system and we examined how to use common table expressions and windowing functions to achieve it with pretty minimal effort.  This same problem lends itself quite nicely to a particular design pattern called pipes and filters so in this post we will explore that technique against this same problem.  </p>
+	<p>As I show people Castle Windsor and how to unlock its power to write more loosely coupled components, most quickly grasp the idea of registering a single component type against a service.  That&#39;s certainly a necessary first step, but what I often see is once developers start using Windsor, the code-base explodes with violations of the Reused Abstractions Principle or the code base still contains the same tightly coupled logic that it always did.  I&#39;ve discussed in previous posts how to identify cases where a decorator, composite, or chain of responsibility can make a dramatic difference on a codebase, but I often see developers run into trouble registering components for these patterns in Windsor.  And in fact I&#39;ve had some developers tell me they abandoned that design simply because they couldn&#39;t get it registered in Windsor.  I found that wholly shocking that a tool we&#39;re using that&#39;s capable of loosening our coupling is contributing to making it worse.  To rectify that, I&#39;m going to demonstrate in this post some ways to compose these patterns in Windsor.  Definitely read to the bottom though as ultimately there is one super-easy way to do it.</p>
 
-<p>A quick refresher on the problem, we have a table that resembles the below:</p>
+<h2>Chain of Responsibility</h2>
 
-<table class="sql">
-<tr><th>Name</th><th>Phone</th><th>EyeColor</th><th>PositionID</th><th>Title</th></tr>
-<tr><td>Franklin</td><td>1212</td><td>Blue</td><td>123</td><td>General Manager</td></tr>
-<tr><td>Franklin</td><td>1212</td><td>Blue</td><td>67</td><td>Salesman</td></tr>
-<tr><td>Pierce</td><td>1313</td><td>Blue</td><td>234</td><td>Digger</td></tr>
-<tr><td>Pierce</td><td>1313</td><td>Blue</td><td>456</td><td>Porter</td></tr>
-<tr><td>Hoolihan</td><td>1414</td><td>Green</td><td>123</td><td>General Manager</td></tr>
-<tr><td>Bob</td><td>1515</td><td>Blue</td><td>86</td><td>Maid</td></tr>
-<tr><td>Bob</td><td>1515</td><td>Blue</td><td>90</td><td>Electrician</td></tr>
-</table>
-
-<p>We want to take that representation and from it, generate a file that looks like the below.  The key pieces:  the Name, Phone, and EyeColor columns should only print one time for a given person, otherwise should be blank; the positions each person has applied for should be sequentially numbered beginning at 1. </p>
-
-<table class="sql">
-<tr><th>Name</th><th>Phone</th><th>EyeColor</th><th>PositionID</th><th>Title</th><th>PositionCount</th></tr>
-<tr><td>Franklin</td><td>1212</td><td>Blue</td><td>123</td><td>General Manager</td><td>1</td></tr>
-<tr><td></td><td></td><td></td><td>67</td><td>Salesman</td><td>2</td></tr>
-<tr><td>Pierce</td><td>1313</td><td>Blue</td><td>234</td><td>Digger</td><td>1</td></tr>
-<tr><td></td><td></td><td></td><td>456</td><td>Porter</td><td>2</td></tr>
-<tr><td>Hoolihan</td><td>1414</td><td>Green</td><td>123</td><td>General Manager</td><td>1</td></tr>
-<tr><td>Bob</td><td>1515</td><td>Blue</td><td>86</td><td>Maid</td><td>1</td></tr>
-<tr><td></td><td></td><td></td><td>90</td><td>Electrician</td><td>2</td></tr>
-</table>
-
-<p>So how might we start this in C#? Well of course the most obvious way might be:</p>
-<div class="highlight"><pre><code class="c# language-c#" data-lang="c#"><span class="k">public</span> <span class="k">class</span> <span class="nc">DataProcessor</span>
-<span class="p">{</span>   
-    <span class="k">public</span> <span class="k">void</span> <span class="nf">Process</span><span class="p">(</span><span class="kt">string</span> <span class="n">connectionString</span><span class="p">,</span> <span class="kt">string</span> <span class="n">outputFilename</span><span class="p">)</span>
+<p>In a chain of responsibility, we have some number of components that all implement the same interface and each one is connected to one (or more) of the others.  Clients call the first component in the chain and based on the logic of the overall chain sub-system, the component can take some action and/or forward it to the next component.  Below is a basic set of components for a chain that we&#39;ll use.  In our case, clients would be handed an instance of FirstInChain, which would call SecondInChain, which would call LastInChain.  </p>
+<div class="highlight"><pre><code class="language-c#" data-lang="c#">
+  <span class="k">public</span> <span class="k">interface</span> <span class="n">IChain</span>
     <span class="p">{</span>
-        <span class="c1">/// Read records from database into some collection, say IEnumerable&lt;Applicant&gt;</span>
-        <span class="c1">/// For each Applicant, either project it into a new type that contains a &quot;PositionCount&quot; property or if it&#39;s already on Applicant, enrich it</span>
-        <span class="c1">/// Write each Applicant record to a file   </span>
-    <span class="p">}</span>
-<span class="p">}</span>
-
-<span class="k">public</span> <span class="k">class</span> <span class="nc">Applicant</span>
-<span class="p">{</span>
-    <span class="k">public</span> <span class="kt">string</span> <span class="n">Name</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
-    <span class="k">public</span> <span class="kt">string</span> <span class="n">Phone</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
-    <span class="k">public</span> <span class="kt">string</span> <span class="n">EyeColor</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
-    <span class="k">public</span> <span class="kt">int</span> <span class="n">PositionID</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
-    <span class="k">public</span> <span class="kt">string</span> <span class="n">Title</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
-    <span class="k">public</span> <span class="kt">int</span> <span class="n">PositionCount</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
-<span class="p">}</span>
-</code></pre></div>
-<p>I&#39;ve left out the code to do each piece, but it&#39;s probably exactly what you imagine.  One big thing stands out to me here:  calling this a DataProcessor is a bit of a code smell (much like calling something a <code>Manager</code>):  what are the steps involved in the processing?  What if they need to vary or are sometimes optional?  What if we want to reuse any single step in the process?  What if we want or need different input parameters to drive other processing steps?  We&#39;ve guaranteed that we will perpetually be cracking open this class and tinkering with it to address most of these questions and that&#39;s a big open-closed violation.  </p>
-
-<p>What&#39;s one easy heuristic to spot a potential OCP violation?  Give the method a hyper specific name.  So in this case instead of calling it <code>Process</code>&#39;, what if we named it <code>ReadFromDatabaseThenAddPositionCountThenWriteToFile</code>.  That would make it much clearer that this method is doing too much.  A-ha, you might say.  What if we just broke up the single Process method into separate methods within the class, problem solved!  Or is it?</p>
-<div class="highlight"><pre><code class="c# language-c#" data-lang="c#"><span class="k">public</span> <span class="k">class</span> <span class="nc">DataProcessor</span>
-<span class="p">{</span>   
-    <span class="k">public</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">LoadFromDatabase</span><span class="p">(</span><span class="kt">string</span> <span class="n">connectionString</span><span class="p">)</span>
-    <span class="p">{</span>
-        <span class="c1">/// Read records from database into some collection, say IEnumerable&lt;Applicant&gt; </span>
+        <span class="kt">string</span> <span class="nf">Get</span><span class="p">();</span>
     <span class="p">}</span>
 
-    <span class="k">public</span> <span class="k">void</span> <span class="nf">AddPositionCount</span><span class="p">(</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">applicants</span><span class="p">)</span>
+    <span class="k">public</span> <span class="k">class</span> <span class="nc">FirstInChain</span> <span class="p">:</span> <span class="n">IChain</span>
     <span class="p">{</span>
-        <span class="c1">/// Compute the number of positions applied for by each individual person and sent Applicant.PositionCount appropriately. </span>
-        <span class="c1">/// Modifies the instances in the passed-in collection</span>
+        <span class="k">public</span> <span class="nf">FirstInChain</span><span class="p">(</span><span class="n">IChain</span> <span class="n">next</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">this</span><span class="p">.</span><span class="n">Next</span> <span class="p">=</span> <span class="n">next</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="kt">string</span> <span class="nf">Get</span><span class="p">()</span>
+        <span class="p">{</span>
+            <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="n">Next</span><span class="p">.</span><span class="nf">Get</span><span class="p">();</span>
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="n">IChain</span> <span class="n">Next</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
     <span class="p">}</span>
 
-    <span class="k">public</span> <span class="k">void</span> <span class="nf">WriteToFile</span><span class="p">(</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">applicants</span><span class="p">,</span> <span class="kt">string</span> <span class="n">absoluteFilename</span><span class="p">)</span>
+    <span class="k">public</span> <span class="k">class</span> <span class="nc">SecondInChain</span> <span class="p">:</span> <span class="n">IChain</span>
     <span class="p">{</span>
-        <span class="c1">/// Write each Applicant record to a file   </span>
+        <span class="k">public</span> <span class="nf">SecondInChain</span><span class="p">(</span><span class="n">IChain</span> <span class="n">next</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">this</span><span class="p">.</span><span class="n">Next</span> <span class="p">=</span> <span class="n">next</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="kt">string</span> <span class="nf">Get</span><span class="p">()</span>
+        <span class="p">{</span>
+            <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="n">Next</span><span class="p">.</span><span class="nf">Get</span><span class="p">();</span>
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="n">IChain</span> <span class="n">Next</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
     <span class="p">}</span>
-<span class="p">}</span>
+
+    <span class="k">public</span> <span class="k">class</span> <span class="nc">LastInChain</span> <span class="p">:</span> <span class="n">IChain</span>
+    <span class="p">{</span>
+        <span class="k">public</span> <span class="nf">LastInChain</span><span class="p">()</span>
+        <span class="p">{</span>        
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="kt">string</span> <span class="nf">Get</span><span class="p">()</span>
+        <span class="p">{</span>
+            <span class="k">return</span> <span class="s">"I'm done"</span><span class="p">;</span>
+        <span class="p">}</span>        
+    <span class="p">}</span>
+
 </code></pre></div>
-<p>So now the use of our <code>DataProcessor</code> is fairly clear:</p>
-<div class="highlight"><pre><code class="c# language-c#" data-lang="c#">    <span class="kt">var</span> <span class="n">processor</span> <span class="p">=</span> <span class="k">new</span> <span class="n">DataProcessor</span><span class="p">();</span>
-    <span class="kt">var</span> <span class="n">applicants</span> <span class="p">=</span> <span class="n">processor</span><span class="p">.</span><span class="n">LoadFromDatabase</span><span class="p">(</span><span class="cm">/* string */</span><span class="p">);</span>
-    <span class="n">processor</span><span class="p">.</span><span class="n">AddPositionCount</span><span class="p">(</span><span class="n">applicants</span><span class="p">);</span>
-    <span class="n">processor</span><span class="p">.</span><span class="n">WriteToFile</span><span class="p">(</span><span class="n">applicants</span><span class="p">,</span> <span class="s">&quot;some_file.txt&quot;</span><span class="p">);</span>
+<p>The most important rule to understand for these registrations is, by default, Windsor will use the first registration for a type to determine how the object graph is composed.  Thus if we want to be given an instance of <code>FirstInChain</code>, it needs to be registered first;</p>
+<div class="highlight"><pre><code class="language-c#" data-lang="c#">
+    <span class="n">container</span><span class="p">.</span><span class="nf">Register</span><span class="p">(</span><span class="n">Component</span><span class="p">.</span><span class="n">For</span><span class="p">&lt;</span><span class="n">IChain</span><span class="p">&gt;().</span><span class="n">ImplementedBy</span><span class="p">&lt;</span><span class="n">FirstInChain</span><span class="p">&gt;());</span>
+
 </code></pre></div>
-<p>Yes, much clearer, but we still have some of the same issues we had before.  If we want to add more steps, we have to open up <code>DataProcessor</code> and add methods to it.  If we wanted to reuse any of the steps (were that possible), we can&#39;t do it cleanly.  And it&#39;s pretty evident here that single responsibility principle is being violated:  this class is doing at least 3 things and that list would only grow if more were added.  So what should we do?</p>
+<p>So now, if we call <code>container.Resolve&lt;IChain&gt;()</code>, we&#39;ll get an instance of <code>FirstInChain</code>, but since Windsor doesn&#39;t have way know what <code>FirstInChain</code> should be given (and it won&#39;t give it an instance of itself), our chain is not properly composed.  So how can we instruct Windsor about our dependencies from First-&gt;Second-&gt;Last?  Well one way is through naming each component and specifying them as dependencies.  Here&#39;s a unit test that will showcase this.  I have scrambled up the order of Second and Last to showcase that Windsor identifies the 
+components using the specified dependency relationships. </p>
+<div class="highlight"><pre><code class="language-c#" data-lang="c#">
+  <span class="p">[</span><span class="n">Fact</span><span class="p">]</span>
+        <span class="k">public</span> <span class="k">void</span> <span class="nf">Register_ChainOfResponsiblity_UsingDependencyOnComponent_ForNamedComponents</span><span class="p">()</span>
+        <span class="p">{</span>
+            <span class="n">var</span> <span class="n">container</span> <span class="p">=</span> <span class="k">new</span> <span class="nf">WindsorContainer</span><span class="p">();</span>
 
-<p>If we agree that each of the methods in the current <code>DataProcessor</code> class is its own responsibility, what if we tried to find a design that put each of those in its own class?  Just shuffling the code around, we would have:</p>
-<div class="highlight"><pre><code class="c# language-c#" data-lang="c#"><span class="k">public</span> <span class="k">class</span> <span class="nc">ApplicantLoader</span>
-<span class="p">{</span>
-    <span class="k">public</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">LoadFromDatabase</span><span class="p">(</span><span class="kt">string</span> <span class="n">connectionString</span><span class="p">)</span> <span class="p">{</span> <span class="cm">/* */</span> <span class="p">}</span>
-<span class="p">}</span>
+            <span class="n">container</span><span class="p">.</span><span class="nf">Register</span><span class="p">(</span><span class="n">Component</span><span class="p">.</span><span class="n">For</span><span class="p">&lt;</span><span class="n">IChain</span><span class="p">&gt;().</span><span class="n">ImplementedBy</span><span class="p">&lt;</span><span class="n">FirstInChain</span><span class="p">&gt;().</span><span class="nf">Named</span><span class="p">(</span><span class="s">"first"</span><span class="p">)</span>
+                                        <span class="p">.</span><span class="nf">DependsOn</span><span class="p">(</span><span class="n">Dependency</span><span class="p">.</span><span class="nf">OnComponent</span><span class="p">(</span><span class="s">"next"</span><span class="p">,</span> <span class="s">"second"</span><span class="p">)));</span>
 
-<span class="k">public</span> <span class="k">class</span> <span class="nc">ApplicantEnricher</span>
-<span class="p">{</span>
-    <span class="k">public</span> <span class="k">void</span> <span class="nf">AddPositionCount</span><span class="p">(</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">applicants</span><span class="p">)</span> <span class="p">{</span> <span class="cm">/* */</span> <span class="p">}</span>
-<span class="p">}</span>
+            <span class="n">container</span><span class="p">.</span><span class="nf">Register</span><span class="p">(</span><span class="n">Component</span><span class="p">.</span><span class="n">For</span><span class="p">&lt;</span><span class="n">IChain</span><span class="p">&gt;().</span><span class="n">ImplementedBy</span><span class="p">&lt;</span><span class="n">LastInChain</span><span class="p">&gt;().</span><span class="nf">Named</span><span class="p">(</span><span class="s">"last"</span><span class="p">));</span>         
 
-<span class="k">public</span> <span class="k">class</span> <span class="nc">ApplicantWriter</span>
-<span class="p">{</span>
-    <span class="k">public</span> <span class="k">void</span> <span class="nf">WriteToFile</span><span class="p">(</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">applicants</span><span class="p">,</span> <span class="kt">string</span> <span class="n">absoluteFilename</span><span class="p">)</span> <span class="p">{</span> <span class="cm">/* */</span> <span class="p">}</span>
-<span class="p">}</span>
+            <span class="n">container</span><span class="p">.</span><span class="nf">Register</span><span class="p">(</span><span class="n">Component</span><span class="p">.</span><span class="n">For</span><span class="p">&lt;</span><span class="n">IChain</span><span class="p">&gt;().</span><span class="n">ImplementedBy</span><span class="p">&lt;</span><span class="n">SecondInChain</span><span class="p">&gt;().</span><span class="nf">Named</span><span class="p">(</span><span class="s">"second"</span><span class="p">)</span>
+                                        <span class="p">.</span><span class="nf">DependsOn</span><span class="p">(</span><span class="n">Dependency</span><span class="p">.</span><span class="nf">OnComponent</span><span class="p">(</span><span class="s">"next"</span><span class="p">,</span> <span class="s">"last"</span><span class="p">)));</span>
+
+            <span class="n">var</span> <span class="n">component</span> <span class="p">=</span> <span class="n">container</span><span class="p">.</span><span class="n">Resolve</span><span class="p">&lt;</span><span class="n">IChain</span><span class="p">&gt;();</span>
+
+            <span class="n">var</span> <span class="n">first</span> <span class="p">=</span> <span class="n">Assert</span><span class="p">.</span><span class="n">IsType</span><span class="p">&lt;</span><span class="n">FirstInChain</span><span class="p">&gt;(</span><span class="n">component</span><span class="p">);</span>
+            <span class="n">var</span> <span class="n">second</span> <span class="p">=</span> <span class="n">Assert</span><span class="p">.</span><span class="n">IsType</span><span class="p">&lt;</span><span class="n">SecondInChain</span><span class="p">&gt;(</span><span class="n">first</span><span class="p">.</span><span class="n">Next</span><span class="p">);</span>
+            <span class="n">var</span> <span class="n">last</span> <span class="p">=</span> <span class="n">Assert</span><span class="p">.</span><span class="n">IsType</span><span class="p">&lt;</span><span class="n">LastInChain</span><span class="p">&gt;(</span><span class="n">second</span><span class="p">.</span><span class="n">Next</span><span class="p">);</span>            
+        <span class="p">}</span>
+
 </code></pre></div>
-<p>Now we&#39;ve cleaned up SRP and OCP violations quite nicely.  These classes decompose the problem into the distinct steps that previously were rather implicit (or at least coupled together) in the single <code>DataProcessor</code>.  But I think we can go one step further.  What&#39;s common about these three classes?  All of them work against a collection of Applicants.  And if we rewrite <code>ApplicantEnricher</code> as:</p>
-<div class="highlight"><pre><code class="c# language-c#" data-lang="c#"><span class="k">public</span> <span class="k">class</span> <span class="nc">ApplicantEnricher</span>
-<span class="p">{</span>
-    <span class="k">public</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">AddPositionCount</span><span class="p">(</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">applicants</span><span class="p">)</span> <span class="p">{</span> <span class="cm">/* */</span> <span class="p">}</span>
-<span class="p">}</span>
+<p>The above is typically the first step most people make when trying to register these components.  This will work fine, but it just feels a little ugly.  How else could we do it?  Here&#39;s the amazing part of Windsor:  it will compose the graph correctly, automatically, if you just order the components the way you want them to be resolved.  </p>
+<div class="highlight"><pre><code class="language-c#" data-lang="c#">
+    <span class="p">[</span><span class="n">Fact</span><span class="p">]</span>
+    <span class="k">public</span> <span class="k">void</span> <span class="nf">AutoWire_ChainOfResponsiblity_BasedOnRegistrationOrder</span><span class="p">()</span>
+    <span class="p">{</span>
+        <span class="n">var</span> <span class="n">container</span> <span class="p">=</span> <span class="k">new</span> <span class="nf">WindsorContainer</span><span class="p">();</span>
+
+        <span class="n">container</span><span class="p">.</span><span class="nf">Register</span><span class="p">(</span><span class="n">Component</span><span class="p">.</span><span class="n">For</span><span class="p">&lt;</span><span class="n">IChain</span><span class="p">&gt;().</span><span class="n">ImplementedBy</span><span class="p">&lt;</span><span class="n">FirstInChain</span><span class="p">&gt;(),</span>                               
+                           <span class="n">Component</span><span class="p">.</span><span class="n">For</span><span class="p">&lt;</span><span class="n">IChain</span><span class="p">&gt;().</span><span class="n">ImplementedBy</span><span class="p">&lt;</span><span class="n">SecondInChain</span><span class="p">&gt;(),</span>
+                           <span class="n">Component</span><span class="p">.</span><span class="n">For</span><span class="p">&lt;</span><span class="n">IChain</span><span class="p">&gt;().</span><span class="n">ImplementedBy</span><span class="p">&lt;</span><span class="n">LastInChain</span><span class="p">&gt;());</span>
+
+        <span class="n">var</span> <span class="n">component</span> <span class="p">=</span> <span class="n">container</span><span class="p">.</span><span class="n">Resolve</span><span class="p">&lt;</span><span class="n">IChain</span><span class="p">&gt;();</span>
+
+        <span class="n">var</span> <span class="n">first</span> <span class="p">=</span> <span class="n">Assert</span><span class="p">.</span><span class="n">IsType</span><span class="p">&lt;</span><span class="n">FirstInChain</span><span class="p">&gt;(</span><span class="n">component</span><span class="p">);</span>
+        <span class="n">var</span> <span class="n">second</span> <span class="p">=</span> <span class="n">Assert</span><span class="p">.</span><span class="n">IsType</span><span class="p">&lt;</span><span class="n">SecondInChain</span><span class="p">&gt;(</span><span class="n">first</span><span class="p">.</span><span class="n">Next</span><span class="p">);</span>
+        <span class="n">var</span> <span class="n">last</span> <span class="p">=</span> <span class="n">Assert</span><span class="p">.</span><span class="n">IsType</span><span class="p">&lt;</span><span class="n">LastInChain</span><span class="p">&gt;(</span><span class="n">second</span><span class="p">.</span><span class="n">Next</span><span class="p">);</span>
+    <span class="p">}</span>
+
 </code></pre></div>
-<p>Then we can quite clearly see there are 3 different types of activities going on here:  an initial source of Applicant records; a specific type of processing against the Applicant records that passes them forward; a sink that logically ends the processing chain in some way (such as writing to a file).  It is from this revelation that we can view this problem as befitting pipes and filters.  In this parlance a filter is a component that takes some input, processes it in some way, and sends forward either that same input or a different input.  A pipe refers to the connection between filters, but that doesn&#39;t always lend itself directly to a single component (so there may not be an <code>IPipe</code> abstraction necessarily). </p>
+<p>The fact that Windsor will auto-wire this escaped me for quite a long time, but this is what makes Windsor so incredible: it just works.  </p>
 
-<p><img src="/images/pipes_and_filters.png"  /></p>
+<p>The same is also true for the other design patterns as well.</p>
 
-<p>One basic implementation of this pattern starts with a handful of interfaces:</p>
-<div class="highlight"><pre><code class="c# language-c#" data-lang="c#"><span class="k">public</span> <span class="k">interface</span> <span class="n">ISourceInput</span> <span class="p">{</span> <span class="p">}</span>
+<h2>Decorator</h2>
 
-<span class="k">public</span> <span class="k">interface</span> <span class="n">ISource</span><span class="p">&lt;</span><span class="n">TIn</span><span class="p">,</span> <span class="n">TOut</span><span class="p">&gt;</span> <span class="k">where</span> <span class="n">TIn</span> <span class="p">:</span> <span class="n">ISourceInput</span>
-<span class="p">{</span>
-    <span class="n">TOut</span> <span class="nf">Load</span><span class="p">(</span><span class="n">TIn</span> <span class="n">input</span><span class="p">);</span>
-<span class="p">}</span>
+<p>A decorator is a pattern where one component of an interface type relies on another instance of that component to do its work.  For example, we may have a class that fetches records from a database and another that caches those records.  The caching component can &quot;decorate&quot; its logic on top of the other component.  Below is a sample set of components we&#39;ll work with.  We want SecondDecorator to be on top and contain an instance of FirstDecorator, which will contain an instance of BaseDecoratableService.  </p>
+<div class="highlight"><pre><code class="language-c#" data-lang="c#">
+ <span class="k">public</span> <span class="k">interface</span> <span class="n">IDecoratableService</span>
+    <span class="p">{</span>
+        <span class="kt">string</span> <span class="nf">Do</span><span class="p">();</span>
+    <span class="p">}</span>
 
-<span class="k">public</span> <span class="k">interface</span> <span class="n">IFilter</span><span class="p">&lt;</span><span class="n">TIn</span><span class="p">,</span> <span class="n">TOut</span><span class="p">&gt;</span>
-<span class="p">{</span>
-    <span class="n">TOut</span> <span class="nf">Filter</span><span class="p">(</span><span class="n">TIn</span> <span class="n">input</span><span class="p">);</span>
-<span class="p">}</span>
+    <span class="k">public</span> <span class="k">class</span> <span class="nc">BaseDecoratableService</span> <span class="p">:</span> <span class="n">IDecoratableService</span>
+    <span class="p">{</span>
+        <span class="k">public</span> <span class="kt">string</span> <span class="nf">Do</span><span class="p">()</span>
+        <span class="p">{</span>
+            <span class="k">return</span> <span class="kt">string</span><span class="p">.</span><span class="n">Empty</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
 
-<span class="k">public</span> <span class="k">interface</span> <span class="n">ISink</span><span class="p">&lt;</span><span class="n">TIn</span><span class="p">&gt;</span>
-<span class="p">{</span>
-    <span class="k">void</span> <span class="nf">Sink</span><span class="p">(</span><span class="n">TIn</span> <span class="n">input</span><span class="p">);</span>
-<span class="p">}</span>
+    <span class="k">public</span> <span class="k">class</span> <span class="nc">FirstDecorator</span> <span class="p">:</span> <span class="n">IDecoratableService</span>
+    <span class="p">{</span>
+        <span class="k">private</span> <span class="k">readonly</span> <span class="n">IDecoratableService</span> <span class="n">inner</span><span class="p">;</span>
+
+        <span class="k">public</span> <span class="nf">FirstDecorator</span><span class="p">(</span><span class="n">IDecoratableService</span> <span class="n">inner</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">this</span><span class="p">.</span><span class="n">inner</span> <span class="p">=</span> <span class="n">inner</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="kt">string</span> <span class="nf">Do</span><span class="p">()</span>
+        <span class="p">{</span>
+            <span class="k">return</span> <span class="kt">string</span><span class="p">.</span><span class="nf">Concat</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="n">inner</span><span class="p">.</span><span class="nf">Do</span><span class="p">(),</span> <span class="s">"#FIRST#"</span><span class="p">);</span>
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="n">IDecoratableService</span> <span class="n">Inner</span> <span class="p">{</span> <span class="k">get</span> <span class="p">{</span> <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="n">inner</span><span class="p">;</span> <span class="p">}</span> <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="k">public</span> <span class="k">class</span> <span class="nc">SecondDecorator</span> <span class="p">:</span> <span class="n">IDecoratableService</span>
+    <span class="p">{</span>
+        <span class="k">private</span> <span class="k">readonly</span> <span class="n">IDecoratableService</span> <span class="n">inner</span><span class="p">;</span>
+
+        <span class="k">public</span> <span class="nf">SecondDecorator</span><span class="p">(</span><span class="n">IDecoratableService</span> <span class="n">inner</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">this</span><span class="p">.</span><span class="n">inner</span> <span class="p">=</span> <span class="n">inner</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="kt">string</span> <span class="nf">Do</span><span class="p">()</span>
+        <span class="p">{</span>
+            <span class="k">return</span> <span class="kt">string</span><span class="p">.</span><span class="nf">Concat</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="n">inner</span><span class="p">.</span><span class="nf">Do</span><span class="p">(),</span> <span class="s">"@@SECOND@@"</span><span class="p">);</span>
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="n">IDecoratableService</span> <span class="n">Inner</span> <span class="p">{</span> <span class="k">get</span> <span class="p">{</span> <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="n">inner</span><span class="p">;</span> <span class="p">}</span> <span class="p">}</span>
+    <span class="p">}</span>
+
 </code></pre></div>
-<p>We define a marker interface <code>ISourceInput</code> that is used to tag any custom class we make that contains configuration or input parameters.  This isn&#39;t strictly required, but I do it to be slightly more explicit.  I find it generally true marker interfaces are a bit of a code smell.  Next the <code>ISource</code> interface is used to define our Source component.  Interestingly, since we&#39;ve stipulated the source must take an input, <code>ISource</code> and <code>IFilter</code> differ only in that the former has a type constraint but again, I think there&#39;s value in being explicit here - nothing stops you from having the filter component also implement <code>ISource</code>.   A Sink can also be a Filter if one just ignores the output from the Sink.  We can now implement our previous components in light of these interfaces:</p>
-<div class="highlight"><pre><code class="c# language-c#" data-lang="c#"><span class="k">public</span> <span class="k">class</span> <span class="nc">LoadApplicantSourceInput</span> <span class="p">:</span> <span class="n">ISourceInput</span>
-<span class="p">{</span>
-    <span class="k">public</span> <span class="kt">string</span> <span class="n">ConnectionString</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
-<span class="p">}</span>
+<p>The registrations for Windsor to auto-wire this are almost identical to the Chain:</p>
+<div class="highlight"><pre><code class="language-c#" data-lang="c#">
+    <span class="p">[</span><span class="n">Fact</span><span class="p">]</span>
+    <span class="k">public</span> <span class="k">void</span> <span class="nf">AutoWire_Decorator</span><span class="p">()</span>
+    <span class="p">{</span>
+        <span class="n">var</span> <span class="n">container</span> <span class="p">=</span> <span class="k">new</span> <span class="nf">WindsorContainer</span><span class="p">();</span>
 
-<span class="k">public</span> <span class="k">class</span> <span class="nc">LoadApplicantsSource</span> <span class="p">:</span> <span class="n">ISource</span><span class="p">&lt;</span><span class="n">LoadApplicantSourceInput</span><span class="p">,</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;&gt;</span>
-<span class="p">{</span>
-    <span class="k">public</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">Load</span><span class="p">(</span><span class="n">LoadApplicantSourceInput</span> <span class="n">input</span><span class="p">)</span> <span class="p">{</span> <span class="p">}</span> 
-<span class="p">}</span>
+        <span class="n">container</span><span class="p">.</span><span class="nf">Register</span><span class="p">(</span><span class="n">Component</span><span class="p">.</span><span class="n">For</span><span class="p">&lt;</span><span class="n">IDecoratableService</span><span class="p">&gt;().</span><span class="n">ImplementedBy</span><span class="p">&lt;</span><span class="n">SecondDecorator</span><span class="p">&gt;(),</span>
+                           <span class="n">Component</span><span class="p">.</span><span class="n">For</span><span class="p">&lt;</span><span class="n">IDecoratableService</span><span class="p">&gt;().</span><span class="n">ImplementedBy</span><span class="p">&lt;</span><span class="n">FirstDecorator</span><span class="p">&gt;(),</span>
+                           <span class="n">Component</span><span class="p">.</span><span class="n">For</span><span class="p">&lt;</span><span class="n">IDecoratableService</span><span class="p">&gt;().</span><span class="n">ImplementedBy</span><span class="p">&lt;</span><span class="n">BaseDecoratableService</span><span class="p">&gt;());</span>       
 
-<span class="k">public</span> <span class="k">class</span> <span class="nc">ComputePositionCountForApplicantFilter</span> <span class="p">:</span> <span class="n">IFilter</span><span class="p">&lt;</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;,</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;&gt;</span>
-<span class="p">{</span>
-    <span class="k">public</span> <span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">Filter</span><span class="p">(</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">applicants</span><span class="p">)</span> <span class="p">{</span> <span class="p">}</span>
-<span class="p">}</span>
+        <span class="n">var</span> <span class="n">service</span> <span class="p">=</span> <span class="n">container</span><span class="p">.</span><span class="n">Resolve</span><span class="p">&lt;</span><span class="n">IDecoratableService</span><span class="p">&gt;();</span>
 
-<span class="k">public</span> <span class="k">class</span> <span class="nc">WriteApplicantsToFileSink</span> <span class="p">:</span> <span class="n">ISink</span><span class="p">&lt;</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;&gt;</span>
-<span class="p">{</span>
-    <span class="k">public</span> <span class="nf">WriteApplicantsToFileSink</span><span class="p">(</span><span class="kt">string</span> <span class="n">filename</span><span class="p">)</span> <span class="p">{</span> <span class="p">}</span>
+        <span class="n">var</span> <span class="n">secondDecorator</span> <span class="p">=</span> <span class="n">Assert</span><span class="p">.</span><span class="n">IsType</span><span class="p">&lt;</span><span class="n">SecondDecorator</span><span class="p">&gt;(</span><span class="n">service</span><span class="p">);</span>
+        <span class="n">var</span> <span class="n">firstDecorator</span> <span class="p">=</span> <span class="n">Assert</span><span class="p">.</span><span class="n">IsType</span><span class="p">&lt;</span><span class="n">FirstDecorator</span><span class="p">&gt;(</span><span class="n">secondDecorator</span><span class="p">.</span><span class="n">Inner</span><span class="p">);</span>
+        <span class="n">var</span> <span class="n">baseService</span> <span class="p">=</span> <span class="n">Assert</span><span class="p">.</span><span class="n">IsType</span><span class="p">&lt;</span><span class="n">BaseDecoratableService</span><span class="p">&gt;(</span><span class="n">firstDecorator</span><span class="p">.</span><span class="n">Inner</span><span class="p">);</span>
+    <span class="p">}</span>
 
-    <span class="k">public</span> <span class="k">void</span> <span class="nf">Sink</span><span class="p">(</span><span class="n">IEnumerable</span><span class="p">&lt;</span><span class="n">Applicant</span><span class="p">&gt;</span> <span class="n">applicants</span><span class="p">)</span> <span class="p">{</span> <span class="p">}</span>
-<span class="p">}</span>
 </code></pre></div>
-<p>It&#39;s roughly the same code as we wrote initially, but we&#39;ve simply split it up into components and raised the level of abstraction.  There&#39;s arguably a few strange things (why does the Source take an input for the connection string, but we provide the output file name to the Sink as a constructor argument) but any of those could be cleaned up or changed based on preference or the particular system they&#39;re being employed in.</p>
+<h2>Composite</h2>
+
+<p>A composite is a pattern where one component contains some number of instances of the same interface and depending on the logic, the composite may selectively call its contained components or call all of them.  The complication for Windsor is that it needs to supply a collection of instances and not just a single instance.  This requires us to add Windsor&#39;s CollectionResolver (if it hasn&#39;t been added previously), but otherwise is identical to the Chain and Decorator:</p>
+<div class="highlight"><pre><code class="language-c#" data-lang="c#">
+    <span class="k">public</span> <span class="k">interface</span> <span class="n">IComposableService</span>
+    <span class="p">{</span>
+        <span class="k">void</span> <span class="nf">Do</span><span class="p">(</span><span class="kt">string</span> <span class="n">s</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="k">public</span> <span class="k">class</span> <span class="nc">CompositeComposableService</span> <span class="p">:</span> <span class="n">IComposableService</span>
+    <span class="p">{</span>
+        <span class="k">public</span> <span class="nf">CompositeComposableService</span><span class="p">(</span><span class="k">params</span> <span class="n">IComposableService</span><span class="p">[]</span> <span class="n">services</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">services</span> <span class="p">==</span> <span class="k">null</span><span class="p">)</span>
+                <span class="k">throw</span> <span class="k">new</span> <span class="nf">ArgumentNullException</span><span class="p">(</span><span class="s">"services"</span><span class="p">);</span>
+
+            <span class="k">this</span><span class="p">.</span><span class="n">Services</span> <span class="p">=</span> <span class="n">services</span><span class="p">.</span><span class="nf">ToList</span><span class="p">();</span>
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="k">void</span> <span class="nf">Do</span><span class="p">(</span><span class="kt">string</span> <span class="n">s</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">this</span><span class="p">.</span><span class="n">Services</span><span class="p">.</span><span class="nf">ToList</span><span class="p">().</span><span class="nf">ForEach</span><span class="p">(</span><span class="n">a</span> <span class="p">=&gt;</span> <span class="n">a</span><span class="p">.</span><span class="nf">Do</span><span class="p">(</span><span class="n">s</span><span class="p">));</span>
+        <span class="p">}</span>
+
+        <span class="k">public</span> <span class="n">IList</span><span class="p">&lt;</span><span class="n">IComposableService</span><span class="p">&gt;</span> <span class="n">Services</span> <span class="p">{</span> <span class="k">get</span><span class="p">;</span> <span class="k">private</span> <span class="k">set</span><span class="p">;</span> <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="k">public</span> <span class="k">class</span> <span class="nc">FirstComposableService</span> <span class="p">:</span> <span class="n">IComposableService</span>
+    <span class="p">{</span>
+        <span class="k">public</span> <span class="k">void</span> <span class="nf">Do</span><span class="p">(</span><span class="kt">string</span> <span class="n">s</span><span class="p">)</span>
+        <span class="p">{</span>            
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="k">public</span> <span class="k">class</span> <span class="nc">SecondComposableService</span> <span class="p">:</span> <span class="n">IComposableService</span>
+    <span class="p">{</span>
+        <span class="k">public</span> <span class="k">void</span> <span class="nf">Do</span><span class="p">(</span><span class="kt">string</span> <span class="n">s</span><span class="p">)</span>
+        <span class="p">{</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="p">[</span><span class="n">Fact</span><span class="p">]</span>
+    <span class="k">public</span> <span class="k">void</span> <span class="nf">AutoWire_Composite</span><span class="p">()</span>
+    <span class="p">{</span>
+        <span class="n">var</span> <span class="n">container</span> <span class="p">=</span> <span class="k">new</span> <span class="nf">WindsorContainer</span><span class="p">();</span>
+        <span class="c1">/// Must add the CollectionResolver or it will not work.
+</span>        <span class="n">container</span><span class="p">.</span><span class="n">Kernel</span><span class="p">.</span><span class="n">Resolver</span><span class="p">.</span><span class="nf">AddSubResolver</span><span class="p">(</span><span class="k">new</span> <span class="nf">CollectionResolver</span><span class="p">(</span><span class="n">container</span><span class="p">.</span><span class="n">Kernel</span><span class="p">));</span>
+
+        <span class="n">container</span><span class="p">.</span><span class="nf">Register</span><span class="p">(</span><span class="n">Component</span><span class="p">.</span><span class="n">For</span><span class="p">&lt;</span><span class="n">IComposableService</span><span class="p">&gt;().</span><span class="n">ImplementedBy</span><span class="p">&lt;</span><span class="n">CompositeComposableService</span><span class="p">&gt;(),</span>
+                           <span class="n">Component</span><span class="p">.</span><span class="n">For</span><span class="p">&lt;</span><span class="n">IComposableService</span><span class="p">&gt;().</span><span class="n">ImplementedBy</span><span class="p">&lt;</span><span class="n">FirstComposableService</span><span class="p">&gt;(),</span>
+                           <span class="n">Component</span><span class="p">.</span><span class="n">For</span><span class="p">&lt;</span><span class="n">IComposableService</span><span class="p">&gt;().</span><span class="n">ImplementedBy</span><span class="p">&lt;</span><span class="n">SecondComposableService</span><span class="p">&gt;());</span>
+
+        <span class="n">var</span> <span class="n">service</span> <span class="p">=</span> <span class="n">container</span><span class="p">.</span><span class="n">Resolve</span><span class="p">&lt;</span><span class="n">IComposableService</span><span class="p">&gt;();</span>
+
+        <span class="n">var</span> <span class="n">composite</span> <span class="p">=</span> <span class="n">Assert</span><span class="p">.</span><span class="n">IsType</span><span class="p">&lt;</span><span class="n">CompositeComposableService</span><span class="p">&gt;(</span><span class="n">service</span><span class="p">);</span>
+
+        <span class="n">Assert</span><span class="p">.</span><span class="nf">Equal</span><span class="p">(</span><span class="m">2</span><span class="p">,</span> <span class="n">composite</span><span class="p">.</span><span class="n">Services</span><span class="p">.</span><span class="nf">Count</span><span class="p">());</span>
+        <span class="n">Assert</span><span class="p">.</span><span class="nf">True</span><span class="p">(</span><span class="n">composite</span><span class="p">.</span><span class="n">Services</span><span class="p">.</span><span class="nf">Any</span><span class="p">(</span><span class="n">a</span> <span class="p">=&gt;</span> <span class="n">a</span><span class="p">.</span><span class="nf">GetType</span><span class="p">()</span> <span class="p">==</span> <span class="k">typeof</span><span class="p">(</span><span class="n">FirstComposableService</span><span class="p">)));</span>
+        <span class="n">Assert</span><span class="p">.</span><span class="nf">True</span><span class="p">(</span><span class="n">composite</span><span class="p">.</span><span class="n">Services</span><span class="p">.</span><span class="nf">Any</span><span class="p">(</span><span class="n">a</span> <span class="p">=&gt;</span> <span class="n">a</span><span class="p">.</span><span class="nf">GetType</span><span class="p">()</span> <span class="p">==</span> <span class="k">typeof</span><span class="p">(</span><span class="n">SecondComposableService</span><span class="p">)));</span>
+    <span class="p">}</span>
+
+</code></pre></div>
+<h2>Wrap Up</h2>
+
+<p>So there you have it: Windsor&#39;s auto-wiring will automatically compose these 3 powerful patterns for you.  In fact it takes more work to <em>not</em> just let Windsor handle this.  Now yes, if you have some specialized resolution needs (such as you don&#39;t always want every component to be put into the Composite or something like that), then you&#39;ll have to do something extra, but otherwise, no longer any need to fear these patterns.  In a future post, I&#39;ll show how you can control conditional resolutions in Windsor as well for some more advanced scenarios. </p>
  	
 	</div>
 	<hr />
       
-	<h2><a href="/2015/03/10/cte-and-windowing-functions.html">Basics of Common Table Expressions and Windowing Functions</a></h2>
-	<div class="date">10 March 2015</div>	
+	<h2><a href="/2015/04/20/generating-mail-addresses-in-autofixture.html">Generating Mail Addresses in AutoFixture</a></h2>
+	<div class="date">20 April 2015</div>	
 	<div class="post">
-	<p>Most developers are aware of how to use basic SQL constructs (Select, Update, Insert) even if their level of database programming is very minimal.  I was fortunate that before I was a fulltime developer, I worked in a role that required me to read, write, and troubleshoot an intense amount of SQL (and actually wasn&#39;t a DBA job).  Over the course of time, I became pretty fair at SQL and others used to bring me random SQL problems for help.  Most of these were straightforward enough problems, but occasionally I would get one that was really difficult, and I really enjoyed those.  Last night a current colleague of mine emailed me about a problem he was having doing some integration work and the solution was a set of SQL Server features that I think deserve to be talked about more:  common table expressions (CTE) and windowing functions.  There&#39;s a lot of power there and it can be overwhelming so the point of this post is to simply describe the problem and then illustrate how CTE and windowing functions made the solution pretty trivial.  </p>
+	<p>I&#39;m wrapping up stage 1 of some modifications to AutoFixture that slightly modify new logic it has for generating a <code>MailAddress</code>.  In case you&#39;re not familiar, <code>MailAddress</code> is the standard framework type for representing email addresses.  A prior pull request to AutoFixture added a new builder that produces these mail addresses, and essentially it did so this way:</p>
+<div class="highlight"><pre><code class="language-c#" data-lang="c#">
+    <span class="n">var</span> <span class="n">name</span> <span class="p">=</span> <span class="n">Guid</span><span class="p">.</span><span class="nf">NewGuid</span><span class="p">().</span><span class="nf">ToString</span><span class="p">();</span>
+    <span class="n">var</span> <span class="n">domain</span> <span class="p">=</span> <span class="k">this</span><span class="p">.</span><span class="n">fictitiousDomains</span><span class="p">[(</span><span class="kt">uint</span><span class="p">)</span><span class="n">name</span><span class="p">.</span><span class="nf">GetHashCode</span><span class="p">()</span> <span class="p">%</span><span class="m">3</span><span class="p">];</span>
 
-<p>Here&#39;s the problem:  we have a table of data about employment applicants (i.e. people who have applied for jobs) in a legacy system.  We&#39;re moving to a new system so we need to take the data from the first system and transform it into a format required by the second system so it can be imported.  </p>
+    <span class="n">var</span> <span class="n">email</span> <span class="p">=</span> <span class="kt">string</span><span class="p">.</span><span class="nf">Format</span><span class="p">(</span><span class="n">CultureInfo</span><span class="p">.</span><span class="n">InvariantCulture</span><span class="p">,</span> <span class="s">"{0} &lt;{0}@{1}&gt;"</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">domain</span><span class="p">);</span>
+    <span class="k">return</span> <span class="k">new</span> <span class="nf">MailAddress</span><span class="p">(</span><span class="n">email</span><span class="p">);</span>
 
-<p>First, here&#39;s the data in the legacy system in a single table (greatly stripped down for illustrative purposes, the real one has about 250+ columns):</p>
-
-<table class="sql">
-<tr><th>Name</th><th>Phone</th><th>EyeColor</th><th>PositionID</th><th>Title</th></tr>
-<tr><td>Franklin</td><td>1212</td><td>Blue</td><td>123</td><td>General Manager</td></tr>
-<tr><td>Franklin</td><td>1212</td><td>Blue</td><td>67</td><td>Salesman</td></tr>
-<tr><td>Pierce</td><td>1313</td><td>Blue</td><td>234</td><td>Digger</td></tr>
-<tr><td>Pierce</td><td>1313</td><td>Blue</td><td>456</td><td>Porter</td></tr>
-<tr><td>Hoolihan</td><td>1414</td><td>Green</td><td>123</td><td>General Manager</td></tr>
-<tr><td>Bob</td><td>1515</td><td>Blue</td><td>86</td><td>Maid</td></tr>
-<tr><td>Bob</td><td>1515</td><td>Blue</td><td>90</td><td>Electrician</td></tr>
-</table>
-
-<p>We&#39;ll call Name, Phone, and EyeColor the &quot;key&quot; fields.  That&#39;s a bit of a misnomer since these keys don&#39;t uniquely identify a single record, but I&#39;m using the term simply to mean that those values are the same for a single person.  We need to sequentially number each record with the same key (and we&#39;ll call it PositionCount).  Franklin has two records so the first is 1 and the second is 2, but Hoolihan has only a single record so its sole record is 1.  We only want to print the key fields for the first position record; otherwise we want to print blanks for the key fields, but still print the position data.  Here&#39;s how we want the data to look for loading into the target system.  </p>
-
-<table class="sql">
-<tr><th>Name</th><th>Phone</th><th>EyeColor</th><th>PositionID</th><th>Title</th><th>PositionCount</th></tr>
-<tr><td>Franklin</td><td>1212</td><td>Blue</td><td>123</td><td>General Manager</td><td>1</td></tr>
-<tr><td></td><td></td><td></td><td>67</td><td>Salesman</td><td>2</td></tr>
-<tr><td>Pierce</td><td>1313</td><td>Blue</td><td>234</td><td>Digger</td><td>1</td></tr>
-<tr><td></td><td></td><td></td><td>456</td><td>Porter</td><td>2</td></tr>
-<tr><td>Hoolihan</td><td>1414</td><td>Green</td><td>123</td><td>General Manager</td><td>1</td></tr>
-<tr><td>Bob</td><td>1515</td><td>Blue</td><td>86</td><td>Maid</td><td>1</td></tr>
-<tr><td></td><td></td><td></td><td>90</td><td>Electrician</td><td>2</td></tr>
-</table>
-
-<p>The first part to tackle:  how can we determine the position counts?  Most people can instantly think of an imperative solution (just loop through the records, adding an incrementing value to that column, resetting for each person), but in SQL we want to think relationally.  A <code>Group By</code> would let us group the records by our keys, but at best we could obtain a count of the records in the group, not quite what we want.  It&#39;s here that a windowing function really shines.  </p>
-
-<p>At the most basic level, a windowing function lets us define a partition (which is similar to a group) against which we can execute some statement.  Below is the SQL that will do the job for me:</p>
-<div class="highlight"><pre><code class="sql language-sql" data-lang="sql"><span class="k">select</span> <span class="o">*</span><span class="p">,</span> <span class="n">row_number</span><span class="p">()</span> <span class="n">over</span> <span class="p">(</span><span class="n">partition</span> <span class="k">by</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">order</span> <span class="k">by</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">asc</span><span class="p">)</span> <span class="k">as</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span> <span class="k">from</span> <span class="n">Persons</span><span class="p">)</span>
 </code></pre></div>
-<p>Probably not terribly hard to understand, but the <code>OVER</code> function is the windowing function.  We instruct it to partition our set based on <code>Name</code>, then order it by <code>Name</code> (which is required), then apply SQL Server&#39;s row_number() function within each partition.  This will have the effect we want: the first record in each partition will get the value 1, the next 2, and so on, but the counts reset for each partition.  By modifying the partition columns, you can control to what level the records are numbered.  See the documentation on the  <a href="https://msdn.microsoft.com/en-us/library/ms189461.aspx">OVER function on MSDN</a> to learn more.   The shown SQL is now capable of providing this result set:</p>
+<p>Basically, the <code>MailAddressGenerator</code> would create by hand two strings, one to represent the part before the &#39;@&#39; and one for the domain.  In order to ensure created email addresses couldn&#39;t slip out into the wild, the <code>ficitiousDomains</code> is simply an instance collection of safe domains (e.g. <code>example.com</code>, <code>example.org</code>, <code>example.net</code>).  However, in AutoFixture it is typically not good form to produce additional specimens when generating a certain type.  Instead, that should be deferred to the <code>ISpecimenContext</code> parameter.  In other words, something like the below would be preferable:</p>
+<div class="highlight"><pre><code class="language-c#" data-lang="c#">
+    <span class="n">var</span> <span class="n">name</span> <span class="p">=</span> <span class="n">context</span><span class="p">.</span><span class="n">Create</span><span class="p">&lt;</span><span class="n">SomeTypeRepresentingEmailName</span><span class="p">&gt;();</span>
+    <span class="n">var</span> <span class="n">domain</span> <span class="p">=</span> <span class="n">context</span><span class="p">.</span><span class="n">Create</span><span class="p">&lt;</span><span class="n">SomeTypeRepresentingEmailDomain</span><span class="p">&gt;();</span>
 
-<table class="sql">
-<tr><th>Name</th><th>Phone</th><th>EyeColor</th><th>PositionID</th><th>Title</th><th>PositionCount</th></tr>
-<tr><td>Franklin</td><td>1212</td><td>Blue</td><td>123</td><td>General Manager</td><td>1</td></tr>
-<tr><td>Franklin</td><td>1212</td><td>Blue</td><td>67</td><td>Salesman</td><td>2</td></tr>
-<tr><td>Pierce</td><td>1313</td><td>Blue</td><td>234</td><td>Digger</td><td>1</td></tr>
-<tr><td>Pierce</td><td>1313</td><td>Blue</td><td>456</td><td>Porter</td><td>2</td></tr>
-<tr><td>Hoolihan</td><td>1414</td><td>Green</td><td>123</td><td>General Manager</td><td>1</td></tr>
-<tr><td>Bob</td><td>1515</td><td>Blue</td><td>86</td><td>Maid</td><td>1</td></tr>
-<tr><td>Bob</td><td>1515</td><td>Blue</td><td>90</td><td>Electrician</td><td>2</td></tr>
-</table>
-
-<p>From here, what we want to achieve is conceptually pretty easy:  we only want to print the value of the key fields when <code>PositionCount</code> is 1, otherwise we want to print a blank (or null).  We could of course make a new table (either temporary or real) and put our newly formed result set in that, then operate against it, but a common table expression (a CTE) is for me faster to develop (albeit with some caveats I&#39;ll cover at the end). </p>
-
-<p>What is a common table expression (CTE)?  Without cribbing directly from Microsoft on the subject, it&#39;s in many ways an in-memory view.  You provide it with a name and you can thereafter use that name for the result set, same as you would a query.  The CTE can be used recursively in other queries and combined in some very powerful ways.  They are incredibly useful if you&#39;ll be referencing the same table or result set multiple times within a query as you can apply a name to that set and just use the name.  And due to how they&#39;re defined, they make queries a lot easier to read as they basically build from the top down in an organized fashion, which is genearlly far easier to decipher than a query with a lot of nested queries. </p>
-
-<p>A CTE is defined in either of the forms:</p>
-<div class="highlight"><pre><code class="sql language-sql" data-lang="sql"><span class="k">WITH</span> <span class="p">(</span><span class="n">CTE</span> <span class="n">Name</span><span class="o">&gt;</span> <span class="k">AS</span> <span class="p">(</span><span class="o">&lt;</span><span class="n">query</span> <span class="n">definition</span><span class="o">&gt;</span><span class="p">)</span> 
-
-<span class="k">WITH</span> <span class="o">&lt;</span><span class="n">CTE</span> <span class="n">Name</span><span class="o">&gt;</span> <span class="p">(</span><span class="o">&lt;</span><span class="k">column</span> <span class="k">names</span><span class="o">&gt;</span><span class="p">)</span> <span class="k">AS</span> <span class="p">(</span><span class="o">&lt;</span><span class="n">query</span> <span class="n">definition</span><span class="o">&gt;</span><span class="p">)</span>
 </code></pre></div>
-<p>The first form defines a CTE with the given name and its columns will be all the columns from the query definition.  The second allows you to specify the column names you want available in the CTE; these are drawn from the query definition.  Only those columns defined in the CTE are then avaiable.  So what&#39;s the point of the CTE?  You can then use it like a table: </p>
-<div class="highlight"><pre><code class="sql language-sql" data-lang="sql"><span class="k">with</span> <span class="n">PositionsCounted</span> <span class="k">as</span> <span class="p">(</span><span class="k">select</span> <span class="o">*</span><span class="p">,</span> <span class="n">row_number</span><span class="p">()</span> <span class="n">over</span> <span class="p">(</span><span class="n">partition</span> <span class="k">by</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">order</span> <span class="k">by</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">asc</span><span class="p">)</span> <span class="k">as</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span> <span class="k">from</span> <span class="n">Persons</span><span class="p">)</span>
-<span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">PositionsCounted</span>
-</code></pre></div>
-<p>The above SQL is equivalent to just executing the query definition directly, all we&#39;ve really done at this point is given the result set a name we can operate against.  But for the final piece, we can do this to produce our final result set:</p>
-<div class="highlight"><pre><code class="sql language-sql" data-lang="sql"><span class="k">with</span> <span class="n">PositionsCounted</span> <span class="k">as</span> <span class="p">(</span><span class="k">select</span> <span class="o">*</span><span class="p">,</span> <span class="n">row_number</span><span class="p">()</span> <span class="n">over</span> <span class="p">(</span><span class="n">partition</span> <span class="k">by</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">order</span> <span class="k">by</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">asc</span><span class="p">)</span> <span class="k">as</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span> <span class="k">from</span> <span class="n">Persons</span><span class="p">)</span>
-<span class="k">select</span> <span class="k">case</span> <span class="k">when</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span><span class="o">&gt;</span><span class="mi">1</span> <span class="k">then</span> <span class="s1">&#39;&#39;</span> <span class="k">else</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">end</span><span class="p">,</span>
-       <span class="k">case</span> <span class="k">when</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span><span class="o">&gt;</span><span class="mi">1</span> <span class="k">then</span> <span class="s1">&#39;&#39;</span> <span class="k">else</span> <span class="p">[</span><span class="n">Phone</span><span class="p">]</span> <span class="k">end</span><span class="p">,</span>
-       <span class="k">case</span> <span class="k">when</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span><span class="o">&gt;</span><span class="mi">1</span> <span class="k">then</span> <span class="s1">&#39;&#39;</span> <span class="k">else</span> <span class="p">[</span><span class="n">EyeColor</span><span class="p">]</span> <span class="k">end</span><span class="p">,</span>
-       <span class="p">[</span><span class="n">PositionID</span><span class="p">],</span> <span class="p">[</span><span class="n">Title</span><span class="p">],</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span> 
-       <span class="k">from</span> <span class="n">PositionsCounted</span>
-</code></pre></div>
-<p>The trick to this SQL is that for each of our key fields, we inspect the value of <code>PositionCount</code> and that determines what we should output (either the value of the column or a blank).  Otherwise, we simply want the non-key fields returned as-is.  Obviously this approach is difficult to scale if there are hundreds of key fields (as each would have to be added manually as a case expression), but in this case when there&#39;s only a minimal number of key fields, it&#39;s trivial. </p>
+<p>The upsides to this approach:</p>
 
-<p>CTEs can be combined as well, such as the below, which simply puts the output of the first CTE into the second, a trivial but hopefully illustrative example:</p>
-<div class="highlight"><pre><code class="sql language-sql" data-lang="sql"><span class="k">with</span> <span class="n">PositionsCounted</span> <span class="k">as</span> <span class="p">(</span><span class="k">select</span> <span class="o">*</span><span class="p">,</span> <span class="n">row_number</span><span class="p">()</span> <span class="n">over</span> <span class="p">(</span><span class="n">partition</span> <span class="k">by</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">order</span> <span class="k">by</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">asc</span><span class="p">)</span> <span class="k">as</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span> <span class="k">from</span> <span class="n">Persons</span><span class="p">),</span>
-<span class="n">OutputReady</span> <span class="k">as</span> 
-<span class="p">(</span><span class="k">select</span> <span class="k">case</span> <span class="k">when</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span><span class="o">&gt;</span><span class="mi">1</span> <span class="k">then</span> <span class="s1">&#39;&#39;</span> <span class="k">else</span> <span class="p">[</span><span class="n">Name</span><span class="p">]</span> <span class="k">end</span> <span class="p">[</span><span class="n">Name</span><span class="p">],</span>
-       <span class="k">case</span> <span class="k">when</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span><span class="o">&gt;</span><span class="mi">1</span> <span class="k">then</span> <span class="s1">&#39;&#39;</span> <span class="k">else</span> <span class="p">[</span><span class="n">Phone</span><span class="p">]</span> <span class="k">end</span> <span class="p">[</span><span class="n">Phone</span><span class="p">],</span>
-       <span class="k">case</span> <span class="k">when</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span><span class="o">&gt;</span><span class="mi">1</span> <span class="k">then</span> <span class="s1">&#39;&#39;</span> <span class="k">else</span> <span class="p">[</span><span class="n">EyeColor</span><span class="p">]</span> <span class="k">end</span> <span class="p">[</span><span class="n">EyeColor</span><span class="p">],</span>
-       <span class="p">[</span><span class="n">PositionID</span><span class="p">],</span> <span class="p">[</span><span class="n">Title</span><span class="p">],</span> <span class="p">[</span><span class="n">PositionCount</span><span class="p">]</span> 
-       <span class="k">from</span> <span class="n">PositionsCounted</span><span class="p">)</span>
-<span class="k">select</span> <span class="o">*</span> <span class="k">from</span> <span class="n">OutputReady</span>
-</code></pre></div>
-<p>So we&#39;ve seen some benefits of CTE, what are the downsides?  First, they are only in scope for a single query.  If you want to reuse them, they have to be copied and pasted into all places that need to reference them.  If you have such a need, temp tables or something more permanent (or semi-permanent) is a better bet.  Second, because they do not exist in tempdb, you cannot add indexes or anything that would improve the performance (and constraints and stats are likewise not available).  Again, if that&#39;s your need, a temp table would be more in order.  </p>
+<ul>
+<li>Deferring creation of those specimens back to the builder chain allows you to better customize those individual pieces</li>
+<li>It is easier to reason about <code>MailAddressGenerator</code> and its logic</li>
+</ul>
 
-<p>I hope you&#39;ve enjoyed this basic look at common table expressions and windowing functions in SQL Server.  This has only scratched the surface of these features so I definitely suggest working through some examples to get a feel for how and when each can be applied in real life situations.  </p>
+<p>Here&#39;s a key question:  since ultimately we need the string representation of our specimens, why don&#39;t we just ask the <code>ISpecimenContext</code> to resolve them as strings within <code>MailAddressGenerator</code>?  That would definitely work, but the risk is: suppose someone has customized string generation in AutoFixture to produce strings that result in invalid <code>MailAddress</code>es?  For that reason, we opted to use a signal type to represent the specimen we needed.  </p>
+
+<p>First, in terms of names, an email address is made up of two parts: the local part and the domain, separated by the &#39;@&#39;.  Any cursory web search will reveal that a number of RFCs touch on the format of email addresses, but they roughly be described as:  between 1 and 64 characters in length; specific list of allowable special characters; only US ASCII characters.  That last one is fairly interesting.  Here are some local parts that Mark offered that presumably he&#39;s seen in the wild, but are prohibited per the RFC:</p>
+<div class="highlight"><pre><code class="language-c#" data-lang="c#">
+    <span class="p">[</span><span class="n">Theory</span><span class="p">]</span>
+    <span class="p">[</span><span class="nf">InlineData</span><span class="p">(</span><span class="s">"ndøh"</span><span class="p">)]</span>
+    <span class="p">[</span><span class="nf">InlineData</span><span class="p">(</span><span class="s">"ndöh"</span><span class="p">)]</span>
+    <span class="p">[</span><span class="nf">InlineData</span><span class="p">(</span><span class="s">"åhnej"</span><span class="p">)]</span>
+    <span class="p">[</span><span class="nf">InlineData</span><span class="p">(</span><span class="s">"ñoñó1234"</span><span class="p">)]</span>
+    <span class="k">public</span> <span class="k">void</span> <span class="nf">LocalParts_AreInvalid</span><span class="p">(</span><span class="kt">string</span> <span class="n">localPart</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="n">var</span> <span class="n">pattern</span> <span class="p">=</span> <span class="s">@"^(?!\.)(""([^""\r\\]|\\[""\r\\])*""|"</span>
+                                        <span class="p">+</span> <span class="s">@"([-A-Za-z0-9!#$%&amp;'*+/=?^_`{|}~]|(?&lt;!\.)\.)*)(?&lt;!\.)$"</span><span class="p">;</span>
+
+        <span class="n">var</span> <span class="n">invalid</span> <span class="p">=</span> <span class="n">System</span><span class="p">.</span><span class="n">Text</span><span class="p">.</span><span class="n">RegularExpressions</span><span class="p">.</span><span class="n">Regex</span><span class="p">.</span><span class="nf">IsMatch</span><span class="p">(</span><span class="n">localPart</span><span class="p">,</span> <span class="n">pattern</span><span class="p">);</span>
+        <span class="n">Assert</span><span class="p">.</span><span class="nf">False</span><span class="p">(</span><span class="n">invalid</span><span class="p">);</span>    
+    <span class="p">}</span>
+
+</code></pre></div>
+<p>How could that be?  How could email addresses be in use that are invalid per the RFC?  Well therein lies the rub.  The RFC says one thing, but email vendors can (and do) allow addresses to be used that violate these rules and that is their prerogative.  And in some ways that&#39;s good because the RFC is pretty restrictive as-written with basically no support for non-US characters.  That is why the typical guidance you here regarding validating email addresses is:  don&#39;t.  Don&#39;t bother.  Perhaps you do some basic syntactic validation or maybe run some regular expressions to ensure there&#39;s nothing suspicious, but otherwise the only true way to know if an email address is valid or not is to send an email message to it.  </p>
+
+<p>That pretty quickly put me into an interesting spot.  I pitched softening the rules a bit (such as to support non-US ASCII characters, but otherwise keep the rules as-is), at which point Mark guided me to a different conclusion.  How was AutoFixture planning to use the <code>EmailAddressLocalPart</code> specimen?  As shown, we plan to request one from the <code>ISpecimenContext</code>, combine it with a domain, and then construct a <code>MailAddress</code> from it.  So for our purposes, the thing that makes an <code>EmailAddressLocalPart</code> valid is simply that <code>MailAddress</code> is able to accept it.  <code>MailAddress</code> already has a lot of validation rules that it applies in the constructor, unfortunately these are done by a <code>MailParser</code> class, which is internal within the <code>System</code> assembly so we cannot directly access it (or at least not easily).  And while we could reverse its rules, we&#39;d be forever subject to the whims of bug fixes and modifications to that logic where <code>MailAddress</code> is concerned.  For that reason, <code>EmailAddressLocalPart</code> has almost no validation in it (other than ensuring the local part constructor parameter not null and not empty) and <code>MailAddressGenerator</code> becomes:</p>
+<div class="highlight"><pre><code class="language-c#" data-lang="c#">
+    <span class="k">try</span> 
+    <span class="p">{</span>
+
+        <span class="n">var</span> <span class="n">localPart</span> <span class="p">=</span> <span class="n">context</span><span class="p">.</span><span class="nf">Resolve</span><span class="p">(</span><span class="k">typeof</span><span class="p">(</span><span class="n">EmailAddressLocalPart</span><span class="p">))</span> <span class="k">as</span> <span class="n">EmailAddressLocalPart</span><span class="p">;</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="n">localPart</span> <span class="p">==</span> <span class="k">null</span><span class="p">)</span>
+        <span class="p">{</span>
+            <span class="k">return</span> <span class="k">new</span> <span class="nf">NoSpecimen</span><span class="p">(</span><span class="n">request</span><span class="p">);</span>
+        <span class="p">}</span>
+
+        <span class="n">var</span> <span class="n">domain</span> <span class="p">=</span> <span class="k">this</span><span class="p">.</span><span class="n">fictitiousDomains</span><span class="p">[(</span><span class="kt">uint</span><span class="p">)</span><span class="n">name</span><span class="p">.</span><span class="nf">GetHashCode</span><span class="p">()</span> <span class="p">%</span><span class="m">3</span><span class="p">];</span>
+
+        <span class="n">var</span> <span class="n">email</span> <span class="p">=</span> <span class="kt">string</span><span class="p">.</span><span class="nf">Format</span><span class="p">(</span><span class="n">CultureInfo</span><span class="p">.</span><span class="n">InvariantCulture</span><span class="p">,</span> <span class="s">"{0} &lt;{0}@{1}&gt;"</span><span class="p">,</span> <span class="n">localPart</span><span class="p">,</span> <span class="n">domain</span><span class="p">);</span>    
+
+        <span class="k">return</span> <span class="k">new</span> <span class="nf">MailAddress</span><span class="p">(</span><span class="n">email</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">catch</span> <span class="p">(</span><span class="n">ArgumentException</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="k">return</span> <span class="k">new</span> <span class="nf">NoSpecimen</span><span class="p">(</span><span class="n">request</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">catch</span> <span class="p">(</span><span class="n">FormatException</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="k">return</span> <span class="k">new</span> <span class="nf">NoSpecimen</span><span class="p">(</span><span class="n">request</span><span class="p">);</span>
+    <span class="p">}</span>
+
+</code></pre></div>
+<p>Since we&#39;re asking the <code>context</code> for an <code>EmailAddressLocalPart</code>, it needs to able to resolve it so we also have an <code>EmailAddressLocalPartGenerator</code>, which resolves a string from the <code>context</code> and produces <code>EmailAddressLocalPart</code> from it.  </p>
+
+<p><h2>What If I&#39;ve Modified AutoFixture&#39;s String Generation?<h2></p>
+
+<p>Let&#39;s say you&#39;re the person that has modified AutoFixture&#39;s behavior where string generation is concerned and you&#39;re also trying to use its behavior for <code>MailAddress</code>es and it&#39;s breaking - what should you do?  In case you&#39;re not familiar with AutoFixture&#39;s design, one can separate the builders it applies into two processes.  First, it has a collection of builders that it attempts to use to satisfy type requests.  These builders are in the <code>Customizations</code> property on the <code>Fixture</code> instance itself.  When AutoFixture gets a request to create a type, it first checks to see if any of these builders can satisfy it and if they do, it uses those values.  If none of the custom builders can handle the request, AutoFixture next uses its <code>Engine</code> to resolve the types.  The <code>Engine</code> is a separate collection of builders and these are what you could consider the core AutoFixture builders that most everyone relies on without thinking about it.  The generators I discussed above, <code>MailAddressGenerator</code> and <code>EmailAddressLocalPartGenerator</code>, are both hooked into the <code>Engine</code> automatically so are always available.  But you as the user are free to define your own builder that will resolve <code>MailAddress</code> or <code>EmailAddressLocalPart</code> however you see fit to work around a case when string generation causes mail address validation failures.  This seems fairly unlikely, but given the goal of AutoFixture being widely applicable to many situations, it is set up to support these needs, albeit you take on a bit more of the burden yourself.  </p>
  	
 	</div>
 	<hr />
