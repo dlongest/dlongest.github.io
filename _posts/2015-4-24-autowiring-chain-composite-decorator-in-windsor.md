@@ -10,7 +10,7 @@ As I show people Castle Windsor and how to unlock its power to write more loosel
 
 In a chain of responsibility, we have some number of components that all implement the same interface and each one is connected to one (or more) of the others.  Clients call the first component in the chain and based on the logic of the overall chain sub-system, the component can take some action and/or forward it to the next component.  Below is a basic set of components for a chain that we'll use.  In our case, clients would be handed an instance of FirstInChain, which would call SecondInChain, which would call LastInChain.  
 
-````c#
+```c#
 
   public interface IChain
     {
@@ -59,7 +59,7 @@ In a chain of responsibility, we have some number of components that all impleme
         }        
     }
 	
-````
+```
 
 The most important rule to understand for these registrations is, by default, Windsor will use the first registration for a type to determine how the object graph is composed.  Thus if we want to be given an instance of `FirstInChain`, it needs to be registered first;
 
