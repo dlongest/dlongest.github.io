@@ -18,12 +18,15 @@ Data frames exist in a lot of different languages.  Python has the awesome Panda
 
 Terminology is important in Deedle.  The documents are excellent, but my goal is to make them even easier.  First, both columns and rows have keys.  In the default usage, the row keys will be integers (auto-incrementing ones technically) and columns are strings.  Here's how we can construct a Frame<int, string> by reading in the wine.data CSV file. 
 <br/>
+
 ````c#
 var frame = Deedle.Frame.ReadCsv(filename, hasHeaders: false);
 ````
+
 <br/>
 In this case, Deedle defaulted that we wanted an int row key and string column key.  Since our input file does not contain headers, we tell Deedle that as well through the method argument.  Deedle thus uses Column_0, Column_1, etc as the column names.  However, we actually know the column names, they're just in a separate file.  So we can easily set the column names after the fact by doing:
 <br/>
+
 ````c#
 frame.RenameColumns(new string[]
 {
@@ -31,6 +34,7 @@ frame.RenameColumns(new string[]
     "Nonflavanoid Phenols", "Proanthocyanins", "Color Intensity", "Hue", "OD280/OD315", "Proline"
 });
 ````
+
 <br/>
 <h2>Changing Values Within A Column</h2>
 
