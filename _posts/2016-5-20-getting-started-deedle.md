@@ -10,7 +10,11 @@ So what is a data frame? Picture this situation.  You have a CSV file where each
 
 In typical .NET usage, you might simply make a custom type (`WineCultivar` or some such) and then use a StreamReader to read lines from the file, spilt it, and then generate instances of your class.  Net result: IEnumerable<WineCultivar> ready for your use.  However, machine learning tasks require a fair amount of data manipulation and pre-processing to prep the data for learning.  For example: you may need to centralize or standardize continuous data; you may need to explode categorical attributes into binary ones; you may need to impute missing values.  That becomes a rather difficult process now as WineCultivar doesn't support that.  We likely end up using a lot of anonymous types or dictionaries to handle the various transforms and while that can work, it's ugly.  Too, suppose we want to operate on data at the column level (such as center all values in the row by subtracting the mean and dividing by the standard deviation)?  There's no particularly clean way to do that.  Enter data frames!
 
+<h2>Data Frames</h2>
+
 Data frames exist in a lot of different languages.  Python has the awesome Pandas library and R gets maximum leverage out of them.  Imagine we have a way to view our data in a tabular fashion (rows and columns), but that allows each column to be heterogeneous.  In other words, we may want some columns to be text and some to be integers and some to be floating-point.  In a multi-dimensional array, we could only achieve that by declaring it of type object[,] and that's so general as to be useless.  Deedle, at a high level, gives us that power and flexibility to slice, index, group, and select data in a row-wise or column-wise fashion and it keeps track of type conversions in a much cleaner way.  
+
+<h2>Loading a Data Frame</h2>
 
 Terminology is important in Deedle.  The documents are excellent, but my goal is to make them even easier.  First, both columns and rows have keys.  In the default usage, the row keys will be integers (auto-incrementing ones technically) and columns are strings.  Here's how we can construct a Frame<int, string> by reading in the wine.data CSV file. 
 
@@ -28,6 +32,8 @@ frame.RenameColumns(new string[]
     "Nonflavanoid Phenols", "Proanthocyanins", "Color Intensity", "Hue", "OD280/OD315", "Proline"
 });
 ````
+
+<h2>Changing Values Within A Column</h2>
 
 For machine learning purposes, `Label` is the class label for the observation and the other columns are the features.  Under the hood, Deedle is storing the data in a column-centric fashion.  What I mean by that is, you can picture the Frame as being a collection of collections.  Each sub-collection corresponds to one of the features (including the `Label` one).  While row access is supported in Deedle, the preferred way to slice and access data is through the columns as typically that is a more natural use-case for a data frame.  If you find yourself accessing through rows a lot, you can interchange the structure by using `Transpose`.  
 
