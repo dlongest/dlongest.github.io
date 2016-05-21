@@ -18,11 +18,13 @@ Data frames exist in a lot of different languages.  Python has the awesome Panda
 
 Terminology is important in Deedle.  The documents are excellent, but my goal is to make them even easier.  First, both columns and rows have keys.  In the default usage, the row keys will be integers (auto-incrementing ones technically) and columns are strings.  Here's how we can construct a Frame<int, string> by reading in the wine.data CSV file. 
 
+
 ````c#
 var frame = Deedle.Frame.ReadCsv(filename, hasHeaders: false);
 ````
 
 In this case, Deedle defaulted that we wanted an int row key and string column key.  Since our input file does not contain headers, we tell Deedle that as well through the method argument.  Deedle thus uses Column_0, Column_1, etc as the column names.  However, we actually know the column names, they're just in a separate file.  So we can easily set the column names after the fact by doing:
+
 
 ````c#
 
@@ -33,11 +35,13 @@ frame.RenameColumns(new string[]
 });
 ````
 
+
 <h2>Changing Values Within A Column</h2>
 
 For machine learning purposes, `Label` is the class label for the observation and the other columns are the features.  Under the hood, Deedle is storing the data in a column-centric fashion.  What I mean by that is, you can picture the Frame as being a collection of collections.  Each sub-collection corresponds to one of the features (including the `Label` one).  While row access is supported in Deedle, the preferred way to slice and access data is through the columns as typically that is a more natural use-case for a data frame.  If you find yourself accessing through rows a lot, you can interchange the structure by using `Transpose`.  
 
 In this data set, there are 3 possible class labels (1, 2, or 3).  This is a good fit for multi-class classification and we're going to use the Accord.NET library for this.  I will not go into much detail on that library and will save that for a follow-up post.  One route to go for this problem, particularly knowing that 2 of the classes are not linearly separable, is to try to use a support vector machine with a nonlinear kernel.  Accord provides such an implementation of those as well as various learning algorithms to train the SVMs, but here's the challenge: Accord requires the labels in a multi-class scenario to start at 0 and go up: our labels as given in the data set don't conform to that.  Deedle can handle that with minimal effort:
+
 
 ````c#
 var relabeled = frame.Columns["Label"].Select(kvp => (int)kvp.Value - 1);
@@ -45,10 +49,9 @@ frame.ReplaceColumn("Label", relabeled);
 
 ````
 
+
 The key thing to know is that Series (the columns) are immutable.  All we can do is generate new series from the old series and then replace them.  However, Frames are to a limited extent mutable.  In this case, we want to subtract 1 from every label to move them from the range [1,3] to the range [0,2]. 
 
 To do so, we simply choose the `Label` column using the Columns property, then use a normal LINQ projection.  The trick in this particular usage is that we are going to enumerate through KeyValuePairs where the key is the row key and the value is the value in the Series.  In this case, we don't need the key at all; all we need to do is subtract 1 from the value.  We have to cast it to an int because under the hood, Deedle is storing the data as objects so we have to keep track of this fact (though there are some ways to be safe about it we'll cover another time).  Now `relabeled` is of type `Series<int, int>` where the first type parameter is the type of the row key (unchanged) and the second parameter is the type of data stored within the series (changed to an int by us).  Now what we need to do is replace the previous `Label` column in the frame with our new version, which can be done easily enough using ReplaceColumn.  This mutates the data frame accordingly.  The one caveat here is that Deedle will now have the `Label` column at the "end" of the frame instead of the beginning so if you inspect or print it, you'll see it shows up in a different place. 
-
-
 
 
